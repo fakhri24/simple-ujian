@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+
+# Cache deploy Firebase
+.firebase/
+
+# Mengabaikan file sensitif Firebase
+firebase/firebase-service-account.json
+firebase/new_passwords.json
+
+# Ekspor pengguna Firebase Auth (berisi password hash + salt) — JANGAN commit
+users.json
+
+# Tool / Agent files
+.agents/
+.claude/
+skills-lock.json.DS_Store

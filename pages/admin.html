@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - Simple Ujian</title>
+    <link rel="stylesheet" href="/css/main.css" />
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+  </head>
+  <body>
+    <div class="admin-wrapper">
+      <!-- Sidebar -->
+      <aside class="admin-sidebar">
+        <div class="sidebar-header">
+          <div class="logo">
+            <span class="logo-icon">🎓</span>
+            <span class="logo-text">Simple Ujian</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <span class="admin-badge">Admin Panel</span>
+            <button id="logout-btn-mobile" type="button" class="remove-row-btn mobile-logout" title="Keluar" style="width: 2.2rem; height: 2.2rem; font-size: 1rem;">
+              🚪
+            </button>
+          </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+          <button type="button" class="nav-item active" data-tab="tab-exams">
+            <span class="nav-icon">📝</span>
+            <span class="nav-label">Manajemen Ujian</span>
+          </button>
+          <button type="button" class="nav-item" data-tab="tab-editor">
+            <span class="nav-icon">✍️</span>
+            <span class="nav-label">Editor Soal</span>
+          </button>
+          <button type="button" class="nav-item" data-tab="tab-monitoring">
+            <span class="nav-icon">🖥️</span>
+            <span class="nav-label">Monitoring Real-Time</span>
+          </button>
+          <button type="button" class="nav-item" data-tab="tab-recap">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Rekap Hasil Ujian</span>
+          </button>
+          <button type="button" class="nav-item" data-tab="tab-students">
+            <span class="nav-icon">👥</span>
+            <span class="nav-label">Manajemen Siswa</span>
+          </button>
+        </nav>
+        
+        <div class="sidebar-footer">
+          <div class="admin-profile">
+            <div class="admin-avatar">A</div>
+            <div class="admin-info">
+              <span class="admin-name">Administrator</span>
+              <span class="admin-role">Admin Utama</span>
+            </div>
+          </div>
+          <button id="logout-btn" type="button" class="logout-btn-new">
+            <span>🚪</span> Keluar
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Viewport -->
+      <div class="admin-viewport">
+        <header class="viewport-header">
+          <h2 id="active-tab-title">Manajemen Ujian</h2>
+          <p id="admin-feedback" class="feedback" role="status" aria-live="polite"></p>
+        </header>
+        
+        <div class="viewport-content">
+          
+          <!-- Tab 1: Manajemen Ujian -->
+          <div id="tab-exams" class="tab-content">
+            <!-- Stats Panel Grid -->
+            <div class="stats-grid" id="exam-tab-stats">
+              <div class="stat-card">
+                <div class="stat-card-info">
+                  <span class="stat-card-val" id="stat-total-exams">-</span>
+                  <span class="stat-card-label">Total Ujian</span>
+                </div>
+                <div class="stat-card-icon">📝</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card-info">
+                  <span class="stat-card-val" id="stat-total-students">-</span>
+                  <span class="stat-card-label">Siswa Terdaftar</span>
+                </div>
+                <div class="stat-card-icon">👥</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card-info">
+                  <span class="stat-card-val" id="stat-total-questions">-</span>
+                  <span class="stat-card-label">Total Soal</span>
+                </div>
+                <div class="stat-card-icon">📚</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card-info">
+                  <span class="stat-card-val" style="color: var(--success); font-weight: 800;">Online</span>
+                  <span class="stat-card-label">Sistem CBT</span>
+                </div>
+                <div class="stat-card-icon">⚡</div>
+              </div>
+            </div>
+
+            <div class="grid-2" style="max-width: 100%; margin: 0; padding: 0;">
+              <section class="card" style="min-height: 720px; display: flex; flex-direction: column; justify-content: flex-start;">
+                <h2>Buat Ujian</h2>
+                <form id="create-exam-form" class="stack">
+                  <label for="exam-title">Judul</label>
+                  <input id="exam-title" name="title" required />
+
+                  <label for="exam-description">Deskripsi</label>
+                  <textarea
+                    id="exam-description"
+                    name="description"
+                    rows="3"
+                    style="resize: none;"
+                  ></textarea>
+
+                  <label for="exam-duration">Durasi (menit)</label>
+                  <input
+                    id="exam-duration"
+                    name="durationMinutes"
+                    type="number"
+                    min="1"
+                    value="30"
+                    required
+                  />
+
+                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-start-time">Waktu Mulai</label>
+                      <input
+                        id="exam-start-time"
+                        name="startTime"
+                        type="datetime-local"
+                        required
+                      />
+                    </div>
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-latest-start-time">Batas Terakhir Mulai</label>
+                      <input
+                        id="exam-latest-start-time"
+                        name="latestStartTime"
+                        type="datetime-local"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-attempts-policy">Kebijakan Pengerjaan</label>
+                      <select id="exam-attempts-policy" name="allowMultipleAttempts">
+                        <option value="false">Hanya Satu Kali</option>
+                        <option value="true" selected>Boleh Diulang</option>
+                      </select>
+                    </div>
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-results-policy">Kebijakan Hasil</label>
+                      <select id="exam-results-policy" name="showResultsImmediately">
+                        <option value="true" selected>Tampilkan Nilai & Hasil</option>
+                        <option value="false">Hanya Pop-up Selamat</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-visibility">Visibilitas</label>
+                      <select id="exam-visibility" name="visibility">
+                        <option value="public" selected>Publik (Semua Siswa)</option>
+                        <option value="private">Privat (Siswa Tertentu)</option>
+                      </select>
+                    </div>
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-randomize-questions">Acak Urutan Soal</label>
+                      <select id="exam-randomize-questions" name="randomizeQuestions">
+                        <option value="false" selected>Tidak (Sesuai Urutan Pembuatan)</option>
+                        <option value="true">Ya (Diacak Setiap Siswa)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-active">Status</label>
+                      <select id="exam-active" name="active">
+                        <option value="true" selected>Aktif</option>
+                        <option value="false">Tidak Aktif</option>
+                      </select>
+                    </div>
+                    <div class="stack" style="margin: 0; opacity: 0; pointer-events: none;">
+                      <label>&nbsp;</label>
+                      <select><option></option></select>
+                    </div>
+                  </div>
+
+                  <div id="student-picker-container" class="stack hidden" style="margin: 0;">
+                    <label>Pilih Siswa</label>
+                    <input type="text" id="student-picker-search" placeholder="Cari nama, NIS, atau kelas..." style="background: white;" />
+                    <div id="student-picker-list" class="student-picker-list">
+                      <!-- Diisi dinamis dari JS -->
+                    </div>
+                    <small class="muted" style="margin-top: 0.25rem;">Dipilih: <span id="student-picker-count">0</span> siswa</small>
+                  </div>
+
+                  <button type="submit">Simpan Ujian</button>
+                </form>
+              </section>
+
+              <section class="card" id="exam-list-section" style="display: flex; flex-direction: column; min-height: 720px;">
+                <h2>Daftar Ujian</h2>
+                <div class="exam-list-scroll-wrapper" style="flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding-right: 0.5rem; margin-top: 1rem;">
+                  <ul id="exam-list" class="list"></ul>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <!-- Tab 2: Editor Soal Interaktif -->
+          <div id="tab-editor" class="tab-content hidden-tab">
+            <section class="card full" id="question-editor-section" style="margin-top: 0;">
+              <h2>Editor Soal Interaktif (Word Import & Export)</h2>
+              <p class="muted" style="margin-top: -0.5rem; margin-bottom: 1.5rem;">
+                Impor soal dari file Word (.docx) atau muat soal dari ujian aktif untuk didedit secara visual, lalu unduh kembali sebagai Word atau simpan perubahan langsung ke ujian.
+              </p>
+              
+              <!-- Sumber Soal -->
+              <div class="editor-sources grid-2" style="grid-template-columns: repeat(3, 1fr); gap: 1rem; padding: 0; margin-bottom: 1.5rem;">
+                <div class="stack" style="margin-top: 0; background: rgba(255, 255, 255, 0.4); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+                  <div>
+                    <h3 style="margin-top: 0; font-size: 1.05rem; color: var(--brand);">1. Muat dari Ujian Aktif</h3>
+                    <label for="editor-load-exam">Pilih Ujian</label>
+                    <select id="editor-load-exam" style="margin-top: 0.5rem; background: white;"></select>
+                  </div>
+                  <button type="button" id="editor-load-exam-btn" style="margin-top: 1rem; width: 100%;">Muat Soal Ujian</button>
+                </div>
+                
+                <div class="stack" style="margin-top: 0; background: rgba(255, 255, 255, 0.4); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+                  <div>
+                    <h3 style="margin-top: 0; font-size: 1.05rem; color: var(--brand);">2. Impor dari Word (.docx)</h3>
+                    <label for="editor-import-file">Pilih File Word (.docx)</label>
+                    <input type="file" id="editor-import-file" accept=".docx" style="margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: white;" />
+                  </div>
+                  <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button type="button" id="editor-import-file-btn" style="width: 100%;" class="secondary">Impor ke Editor</button>
+                    <button type="button" id="editor-download-template-btn" class="secondary" style="width: 100%; font-size: 0.85rem; padding: 0.5rem;">Download Template Word</button>
+                  </div>
+                </div>
+                
+                <div class="stack" style="margin-top: 0; background: rgba(255, 255, 255, 0.4); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+                  <div>
+                    <h3 style="margin-top: 0; font-size: 1.05rem; color: var(--brand);">3. Mulai dari Kosong</h3>
+                    <p class="muted" style="font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
+                      Reset editor dan buat bank soal baru dari lembar kosong.
+                    </p>
+                  </div>
+                  <button type="button" id="editor-clear-btn" class="danger" style="margin-top: 1rem; width: 100%;">Reset / Kosongkan</button>
+                </div>
+              </div>
+              
+              <!-- Editor Workspace (Hidden by default) -->
+              <div id="editor-workspace" class="hidden" style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                
+                <!-- ROW 1: Split Workspace (Editor di Kiri, Preview di Kanan) -->
+                <div class="editor-split-workspace">
+                  
+                  <!-- Kolom Kiri: Form Edit Aktif -->
+                  <div id="editor-active-form-card" class="card hidden editor-workspace-card" style="margin-top: 0;">
+                    <h3 id="editor-form-title" class="editor-workspace-card-title">
+                      Penyuntingan Detail Soal
+                    </h3>
+                    
+                    <div class="stack editor-form-scroll" style="gap: 0.85rem; margin-top: 0;">
+                      <div class="grid-2" style="grid-template-columns: 1.2fr 0.8fr; gap: 1rem; padding: 0;">
+                        <div class="stack" style="margin: 0;">
+                          <label for="edit-q-type">Tipe Soal</label>
+                          <select id="edit-q-type" required style="background: white;">
+                            <option value="pg">PG (Pilihan Ganda)</option>
+                            <option value="pgk">PGK (Pilihan Ganda Kompleks)</option>
+                            <option value="tf">TF (Benar/Salah - Satu Pernyataan)</option>
+                            <option value="tf_matrix">TF Matrix (Tabel Pernyataan)</option>
+                            <option value="essay">Essay</option>
+                            <option value="match">Match (Menjodohkan)</option>
+                          </select>
+                        </div>
+                        <div class="stack" style="margin: 0;">
+                          <label for="edit-q-score">Bobot Nilai</label>
+                          <input id="edit-q-score" type="number" min="1" value="10" required style="background: white;" />
+                        </div>
+                      </div>
+                      
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem;">
+                        <label style="margin: 0;">Konten Soal (HTML / LaTeX)</label>
+                        <button type="button" id="edit-insert-img-btn" class="secondary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; border-radius: 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem; height: auto;">
+                          📷 Unggah Gambar
+                        </button>
+                        <input type="file" id="edit-image-file-input" accept="image/*" style="display: none;" />
+                      </div>
+                      
+                      <!-- WYSIWYG Editor (Quill) -->
+                      <div id="edit-q-editor-wrapper" style="background: white; border-radius: 12px; overflow: hidden; border: 1.5px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                        <div id="edit-q-quill-editor" style="height: 150px; font-family: inherit; font-size: 0.95rem;"></div>
+                      </div>
+                      <textarea id="edit-q-content" rows="4" required style="display: none;" placeholder="Masukkan teks soal atau tag HTML/LaTeX..."></textarea>
+                      
+                      <!-- Dynamic Form Fields -->
+                      <div id="edit-dynamic-fields" class="stack" style="gap: 0.75rem; margin-top: 0.5rem;"></div>
+                      <button type="button" id="edit-add-row-btn" class="add-row-btn" style="margin-top: 0.5rem;">+ Tambah Baris</button>
+                    </div>
+                    
+                    <div class="actions" style="margin-top: 1rem; justify-content: flex-end; gap: 0.75rem;">
+                      <button type="button" id="edit-cancel-btn" class="secondary" style="padding: 0.5rem 1.25rem;">Batal</button>
+                      <button type="button" id="edit-save-btn" style="padding: 0.5rem 1.5rem;">Simpan ke List</button>
+                    </div>
+                  </div>
+                  
+                  <!-- Kolom Kanan: Live Preview Visual (Read-only) -->
+                  <div id="editor-preview-card" class="card hidden editor-workspace-card" style="margin-top: 0;">
+                    <h3 class="editor-workspace-card-title" style="color: var(--brand);">
+                      Pratinjau Visual (Siswa View)
+                    </h3>
+                    <div class="preview-scroll-wrapper" style="flex: 1; overflow-y: auto; background: rgba(255,255,255,0.4); border-radius: 12px; padding: 1rem; border: 1px dashed var(--border);">
+                      <div id="edit-q-preview-box" class="exam-preview-container" style="line-height: 1.6;">
+                        <!-- Render visual soal statis lengkap di sini -->
+                      </div>
+                    </div>
+                  </div>
+                  
+                </div>
+                
+                <!-- ROW 2: Bottom Dock (Horizontal List of Questions) -->
+                <div class="editor-bottom-dock-container">
+                  <div class="editor-dock-header">
+                    <h3 style="margin: 0; font-size: 1.05rem; color: #334155; display: flex; align-items: center; gap: 0.5rem;">
+                      Daftar Bank Soal di Editor (<span id="editor-questions-count">0</span>)
+                    </h3>
+                    <button type="button" id="editor-add-q-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                      ➕ Tambah Soal Baru
+                    </button>
+                  </div>
+                  
+                  <!-- Horizontal Card Container -->
+                  <div id="editor-questions-list" class="editor-dock-scroll">
+                    <!-- Mini Question Cards will render here horizontally -->
+                  </div>
+                </div>
+                
+                <!-- ROW 3: Action Global di Bagian Bawah -->
+                <div class="stack" style="flex-direction: row; justify-content: space-between; align-items: center; margin-top: 1.5rem; border-top: 1.5px solid var(--border); padding-top: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                  <button type="button" id="editor-download-docx-btn" class="secondary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem;">
+                    📥 Unduh Soal (.docx)
+                  </button>
+                  
+                  <div style="display: inline-flex; align-items: center; gap: 0.75rem; background: rgba(255, 255, 255, 0.4); padding: 0.4rem 0.5rem 0.4rem 1.25rem; border-radius: 12px; border: 1px solid var(--border); flex-wrap: wrap;">
+                    <label for="editor-save-target-exam" style="margin: 0; font-weight: 600; color: #475569;">Simpan Langsung ke Ujian:</label>
+                    <select id="editor-save-target-exam" style="width: auto; border: 1px solid var(--border); background: white; padding: 0.5rem 2rem 0.5rem 1rem; font-weight: 600; color: var(--brand); border-radius: 8px;"></select>
+                    <button type="button" id="editor-save-exam-btn" style="padding: 0.6rem 1.25rem;">💾 Terapkan ke Ujian</button>
+                  </div>
+                </div>
+                
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab 3: Monitoring Ujian Siswa -->
+          <div id="tab-monitoring" class="tab-content hidden-tab">
+            <section class="card full" id="monitoring-section" style="margin-top: 0;">
+              <h2>Monitoring Ujian Siswa (Real-Time)</h2>
+              <p class="muted" style="margin-top: -0.5rem; margin-bottom: 1.5rem;">Pantau sisa waktu pengerjaan siswa secara langsung dan berikan tambahan waktu kompensasi.</p>
+              <div class="table-responsive">
+                <table class="matrix-table">
+                  <thead>
+                    <tr>
+                      <th>Nama Siswa</th>
+                      <th>Kelas</th>
+                      <th>Nama Ujian</th>
+                      <th>Sisa Waktu</th>
+                      <th style="text-align: center;">Total Kompensasi</th>
+                      <th style="text-align: center;">Pelanggaran</th>
+                      <th style="text-align: center;">Kompensasi Waktu</th>
+                      <th style="text-align: center;">Kontrol Ujian</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monitoring-list">
+                    <tr>
+                      <td colspan="8" class="muted" style="text-align: center; padding: 1.5rem;">Tidak ada siswa yang sedang aktif ujian saat ini.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="monitoring-pagination" class="pagination-container"></div>
+            </section>
+          </div>
+
+          <!-- Tab 4: Rekap Hasil Ujian Siswa -->
+          <div id="tab-recap" class="tab-content hidden-tab">
+            <section class="card full" id="recap-section" style="margin-top: 0;">
+              <h2>Rekap Hasil Ujian Siswa (Real-Time)</h2>
+              <p class="muted" style="margin-top: -0.5rem; margin-bottom: 1.5rem;">Lihat rekap nilai, pengerjaan, dan lakukan koreksi essay secara manual.</p>
+              <div class="recap-controls" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; background: rgba(255,255,255,0.4); padding: 1rem; border-radius: 12px; border: 1px solid var(--border);">
+                <div style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                  <label for="recap-filter-exam" style="margin: 0; font-weight: 600; color: #475569;">Filter Ujian:</label>
+                  <select id="recap-filter-exam" style="width: auto; background: white; padding: 0.5rem 2rem 0.5rem 1rem; font-weight: 600; color: var(--brand); border-radius: 8px; border: 1px solid var(--border);">
+                    <option value="all">Semua Ujian</option>
+                  </select>
+                </div>
+                <button type="button" id="download-recap-csv-btn" class="secondary" style="padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 0.5rem; border-color: var(--brand);">
+                  📥 Unduh Rekap CSV
+                </button>
+              </div>
+              <div class="table-responsive">
+                <table class="matrix-table">
+                  <thead>
+                    <tr>
+                      <th>Nama Siswa</th>
+                      <th>Kelas</th>
+                      <th>Judul Ujian</th>
+                      <th>Waktu Selesai</th>
+                      <th style="text-align: center;">Nilai Akhir</th>
+                      <th style="text-align: center;">Status Koreksi</th>
+                      <th style="text-align: center;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recap-list">
+                    <tr>
+                      <td colspan="7" class="muted" style="text-align: center; padding: 1.5rem;">Belum ada hasil ujian yang diserahkan.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="recap-pagination" class="pagination-container"></div>
+            </section>
+          </div>
+
+          <!-- Tab 5: Manajemen Siswa -->
+          <div id="tab-students" class="tab-content hidden-tab">
+            <div class="stack" style="gap: 1.5rem; max-width: 100%; margin: 0; padding: 0;">
+              
+              <!-- Baris Atas: Form Manual (Kiri) & Impor CSV (Kanan) -->
+              <div class="grid-2" style="max-width: 100%; margin: 0; padding: 0; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                
+                <!-- Card 1: Tambah Manual -->
+                <section class="card" style="margin: 0; height: 100%;">
+                  <h2>Pendaftaran Siswa Baru</h2>
+                  <p class="muted" style="margin-top: -0.5rem; margin-bottom: 1.25rem;">Registrasi siswa secara manual ke dalam sistem.</p>
+                  <form id="create-student-form" class="stack" style="gap: 0.75rem;">
+                    <label for="student-name">Nama Lengkap</label>
+                    <input id="student-name" name="namaLengkap" required placeholder="Nama Lengkap Siswa" style="background: white;" />
+
+                    <label for="student-email">Email</label>
+                    <input id="student-email" name="email" type="email" required placeholder="siswa@example.com" style="background: white;" />
+
+                    <label for="student-password">Password</label>
+                    <input id="student-password" name="password" type="password" required minlength="6" placeholder="Minimal 6 karakter" style="background: white;" />
+
+                    <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                      <div class="stack" style="margin: 0;">
+                        <label for="student-class">Kelas</label>
+                        <input id="student-class" name="kelas" required placeholder="Contoh: XII-IPA-1" style="background: white;" />
+                      </div>
+                      <div class="stack" style="margin: 0;">
+                        <label for="student-nis">NIS</label>
+                        <input id="student-nis" name="nis" required placeholder="Nomor Induk Siswa" style="background: white;" />
+                      </div>
+                    </div>
+
+                    <button type="submit" style="margin-top: 0.5rem;">Daftarkan Siswa</button>
+                  </form>
+                </section>
+
+                <!-- Kanan: Impor CSV & Logger Progress -->
+                <div class="stack" style="gap: 1.5rem; margin-top: 0; justify-content: flex-start; height: 100%;">
+                  <!-- Card 2: Impor Bulk CSV -->
+                  <section class="card" style="margin: 0;">
+                    <h2>Impor Masal via CSV</h2>
+                    <p class="muted" style="margin-top: -0.5rem; margin-bottom: 1.25rem;">Unggah file CSV untuk mendaftarkan banyak siswa sekaligus.</p>
+                    
+                    <div class="stack" style="gap: 1rem; margin-top: 0;">
+                      <button type="button" id="download-student-template-btn" class="secondary" style="width: 100%;">
+                        📥 Unduh Template CSV Siswa
+                      </button>
+                      
+                      <div style="border: 2px dashed var(--border); border-radius: 12px; padding: 1.5rem; text-align: center; background: rgba(255,255,255,0.2);">
+                        <label for="student-csv-file" style="cursor: pointer; font-weight: 600; color: var(--brand); display: block; margin-bottom: 0.5rem;">Pilih File CSV</label>
+                        <input type="file" id="student-csv-file" accept=".csv" style="display: block; margin: 0 auto; max-width: 100%; font-size: 0.9rem;" />
+                      </div>
+
+                      <button type="button" id="import-student-csv-btn" style="width: 100%;">
+                        🚀 Mulai Impor Siswa
+                      </button>
+                    </div>
+                  </section>
+
+                  <!-- Card 3: Logger Progress Impor (Hidden by default) -->
+                  <section id="student-import-logger-card" class="card hidden" style="margin: 0; max-height: 250px; display: flex; flex-direction: column;">
+                    <h2>Progress Impor Siswa</h2>
+                    <div id="student-import-progress-bar" style="width: 100%; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 0.75rem;">
+                      <div id="student-import-progress-fill" style="width: 0%; height: 100%; background: var(--brand); transition: width 0.3s ease;"></div>
+                    </div>
+                    <div id="student-import-progress-text" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem;">Memproses 0 dari 0 siswa...</div>
+                    <div id="student-import-log-list" style="flex: 1; overflow-y: auto; font-family: monospace; font-size: 0.85rem; padding: 0.5rem; background: rgba(0,0,0,0.03); border-radius: 8px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.25rem; text-align: left; max-height: 120px;">
+                    </div>
+                  </section>
+                </div>
+
+              </div>
+
+              <!-- Baris Bawah: Tabel List Siswa Aktif (Full Width) -->
+              <section class="card" id="students-list-section" style="margin: 0; display: flex; flex-direction: column;">
+                <h2>Daftar Siswa Terdaftar</h2>
+                <p class="muted" style="margin-top: -0.5rem; margin-bottom: 1.5rem;">Siswa yang terdaftar aktif di dalam sistem.</p>
+                
+                <div class="table-responsive" style="flex: 1;">
+                  <table class="matrix-table">
+                    <thead>
+                      <tr>
+                        <th>NIS</th>
+                        <th>Nama Lengkap</th>
+                        <th>Kelas</th>
+                        <th>Email</th>
+                        <th style="text-align: center;">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="students-table-body">
+                      <tr>
+                        <td colspan="5" class="muted" style="text-align: center; padding: 1.5rem;">Memuat daftar siswa...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div id="students-pagination" class="pagination-container" style="margin-top: 1rem;"></div>
+              </section>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Switching Controller -->
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const navItems = document.querySelectorAll(".nav-item");
+        const tabContents = document.querySelectorAll(".tab-content");
+        const activeTabTitle = document.getElementById("active-tab-title");
+
+        navItems.forEach(item => {
+          item.addEventListener("click", (e) => {
+            e.preventDefault();
+            const targetTabId = item.getAttribute("data-tab");
+            
+            // Update active nav item
+            navItems.forEach(nav => nav.classList.remove("active"));
+            item.classList.add("active");
+
+            // Update tab contents
+            tabContents.forEach(tab => {
+              if (tab.id === targetTabId) {
+                tab.classList.remove("hidden-tab");
+              } else {
+                tab.classList.add("hidden-tab");
+              }
+            });
+
+            // Update title
+            const label = item.querySelector(".nav-label").textContent;
+            activeTabTitle.textContent = label;
+            
+            // Save active tab state
+            localStorage.setItem("admin_active_tab", targetTabId);
+          });
+        });
+
+        // Restore active tab if saved
+        const savedTab = localStorage.getItem("admin_active_tab");
+        if (savedTab) {
+          const targetItem = document.querySelector(`.nav-item[data-tab="${savedTab}"]`);
+          if (targetItem) {
+            targetItem.click();
+          }
+        }
+
+        // Bind mobile logout action to desktop button
+        document.getElementById("logout-btn-mobile")?.addEventListener("click", () => {
+          document.getElementById("logout-btn")?.click();
+        });
+      });
+    </script>
+
+    <!-- Modal Preview Ujian -->
+    <div id="preview-modal" class="modal hidden" aria-hidden="true" role="dialog">
+      <div class="modal-content card">
+        <header class="modal-header">
+          <h2 id="modal-exam-title">Pratinjau Ujian</h2>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button type="button" id="modal-print-btn" class="secondary" style="padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;">
+              🖨️ Cetak PDF
+            </button>
+            <button type="button" id="close-modal-btn" class="remove-row-btn" aria-label="Tutup pratinjau" style="font-size: 1.1rem; width: 2.5rem; height: 2.5rem;">✕</button>
+          </div>
+        </header>
+        <main id="modal-questions-container" class="modal-body stack" style="margin-top: 1.5rem; max-height: 70vh; overflow-y: auto; padding-right: 0.5rem;"></main>
+      </div>
+    </div>
+
+    <!-- Modal Detail Pelanggaran -->
+    <div id="cheating-modal" class="modal hidden" aria-hidden="true" role="dialog">
+      <div class="modal-content card" style="max-width: 500px;">
+        <header class="modal-header">
+          <h2 id="cheating-modal-title">Detail Pelanggaran</h2>
+          <button type="button" id="close-cheating-modal-btn" class="remove-row-btn" aria-label="Tutup detail" style="font-size: 1.1rem; width: 2.5rem; height: 2.5rem;">✕</button>
+        </header>
+        <main class="modal-body stack" style="margin-top: 1.5rem; max-height: 50vh; overflow-y: auto; padding-right: 0.5rem;">
+          <div id="cheating-modal-student-info" style="font-weight: 600; font-size: 1rem; color: var(--brand); margin-bottom: 0.5rem;"></div>
+          <ul id="cheating-logs-list" class="stack" style="list-style: none; padding: 0; margin: 0; gap: 0.75rem;"></ul>
+        </main>
+      </div>
+    </div>
+
+    <!-- Modal Detail Hasil Ujian -->
+    <div id="submission-detail-modal" class="modal hidden" aria-hidden="true" role="dialog">
+      <div class="modal-content card" style="max-width: 800px;">
+        <header class="modal-header">
+          <h2 id="submission-detail-title">Detail Hasil Ujian</h2>
+          <button type="button" id="close-submission-detail-btn" class="remove-row-btn" aria-label="Tutup detail" style="font-size: 1.1rem; width: 2.5rem; height: 2.5rem;">✕</button>
+        </header>
+        <main class="modal-body stack" style="margin-top: 1.5rem; max-height: 70vh; overflow-y: auto; padding-right: 0.5rem;">
+          <div class="grid-2" style="padding: 0; margin-bottom: 1rem; gap: 1rem; grid-template-columns: repeat(4, 1fr);">
+            <div>
+              <p style="margin: 0; font-size: 0.85rem;" class="muted">Siswa</p>
+              <strong id="detail-student-email" style="font-size: 0.95rem; word-break: break-all;">-</strong>
+            </div>
+            <div>
+              <p style="margin: 0; font-size: 0.85rem;" class="muted">Ujian</p>
+              <strong id="detail-exam-title" style="font-size: 0.95rem;">-</strong>
+            </div>
+            <div>
+              <p style="margin: 0; font-size: 0.85rem;" class="muted">Waktu Selesai</p>
+              <strong id="detail-submit-time" style="font-size: 0.95rem;">-</strong>
+            </div>
+            <div>
+              <p style="margin: 0; font-size: 0.85rem;" class="muted">Nilai Total</p>
+              <strong id="detail-total-score" style="font-size: 1.3rem; color: var(--brand); font-family: Outfit, sans-serif;">-</strong>
+            </div>
+          </div>
+          <div id="detail-questions-container" class="stack" style="gap: 1.5rem;"></div>
+          <div id="detail-grading-actions" class="stack hidden" style="margin-top: 1rem; border-top: 1.5px solid var(--border); padding-top: 1.5rem; flex-direction: row; justify-content: flex-end; gap: 1rem;">
+            <button type="button" id="save-grading-btn" style="background: var(--success);">Simpan Koreksi Essay</button>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- Modal Edit Ujian -->
+    <div id="edit-exam-modal" class="modal hidden" aria-hidden="true" role="dialog">
+      <div class="modal-content card" style="max-width: 600px;">
+        <header class="modal-header">
+          <h2>Edit Ujian</h2>
+          <button type="button" id="close-edit-exam-btn" class="remove-row-btn" aria-label="Tutup edit" style="font-size: 1.1rem; width: 2.5rem; height: 2.5rem;">✕</button>
+        </header>
+        <main class="modal-body stack" style="margin-top: 1.5rem; max-height: 65vh; overflow-y: auto; padding-right: 0.5rem;">
+          <form id="edit-exam-form" class="stack">
+            <input type="hidden" id="edit-exam-id" />
+            
+            <label for="edit-exam-title">Judul</label>
+            <input id="edit-exam-title" required style="background: white;" />
+
+            <label for="edit-exam-description">Deskripsi</label>
+            <textarea
+              id="edit-exam-description"
+              rows="3"
+              style="resize: none; background: white;"
+            ></textarea>
+
+            <label for="edit-exam-duration">Durasi (menit)</label>
+            <input
+              id="edit-exam-duration"
+              type="number"
+              min="1"
+              required
+              style="background: white;"
+            />
+
+            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-start-time">Waktu Mulai</label>
+                <input
+                  id="edit-exam-start-time"
+                  type="datetime-local"
+                  required
+                  style="background: white;"
+                />
+              </div>
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-latest-start-time">Batas Terakhir Mulai</label>
+                <input
+                  id="edit-exam-latest-start-time"
+                  type="datetime-local"
+                  required
+                  style="background: white;"
+                />
+              </div>
+            </div>
+
+            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-attempts-policy">Kebijakan Pengerjaan</label>
+                <select id="edit-exam-attempts-policy" style="background: white;">
+                  <option value="false">Hanya Satu Kali</option>
+                  <option value="true">Boleh Diulang</option>
+                </select>
+              </div>
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-results-policy">Kebijakan Hasil</label>
+                <select id="edit-exam-results-policy" style="background: white;">
+                  <option value="true">Tampilkan Nilai & Hasil</option>
+                  <option value="false">Hanya Pop-up Selamat</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-visibility">Visibilitas</label>
+                <select id="edit-exam-visibility" name="visibility" style="background: white;">
+                  <option value="public">Publik (Semua Siswa)</option>
+                  <option value="private">Privat (Siswa Tertentu)</option>
+                </select>
+              </div>
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-randomize-questions">Acak Urutan Soal</label>
+                <select id="edit-exam-randomize-questions" name="randomizeQuestions" style="background: white;">
+                  <option value="false">Tidak (Sesuai Urutan Pembuatan)</option>
+                  <option value="true">Ya (Diacak Setiap Siswa)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-active">Status</label>
+                <select id="edit-exam-active" style="background: white;">
+                  <option value="true">Aktif</option>
+                  <option value="false">Tidak Aktif</option>
+                </select>
+              </div>
+              <div class="stack" style="margin: 0; opacity: 0; pointer-events: none;">
+                <label>&nbsp;</label>
+                <select><option></option></select>
+              </div>
+            </div>
+
+            <div id="edit-student-picker-container" class="stack hidden" style="margin: 0;">
+              <label>Pilih Siswa</label>
+              <input type="text" id="edit-student-picker-search" placeholder="Cari nama, NIS, atau kelas..." style="background: white;" />
+              <div id="edit-student-picker-list" class="student-picker-list">
+                <!-- Diisi dinamis dari JS -->
+              </div>
+              <small class="muted" style="margin-top: 0.25rem;">Dipilih: <span id="edit-student-picker-count">0</span> siswa</small>
+            </div>
+
+            <div class="actions" style="margin-top: 1.5rem; justify-content: flex-end; gap: 0.75rem;">
+              <button type="button" id="cancel-edit-exam-btn" class="secondary" style="padding: 0.5rem 1.25rem;">Batal</button>
+              <button type="submit" style="padding: 0.5rem 1.5rem;">Simpan Perubahan</button>
+            </div>
+          </form>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/js/pages/adminPage.js"></script>
+  </body>
+</html>

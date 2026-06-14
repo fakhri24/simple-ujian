@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Exam - Simple Ujian</title>
+    <link rel="stylesheet" href="/css/main.css" />
+  </head>
+  <body class="exam-body">
+    <!-- Global Loading Screen -->
+    <div id="global-loading-screen" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999999; font-family: 'Outfit', sans-serif; transition: opacity 0.4s ease, visibility 0.4s ease;">
+      <div style="text-align: center; max-width: 400px; padding: 2rem; display: flex; flex-direction: column; align-items: center; gap: 1.5rem;">
+        <div class="anti-cheat-icon" style="font-size: 4rem;">🛡️</div>
+        <div style="font-weight: 800; font-size: 1.6rem; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Menyiapkan Ujian Aman</div>
+        <p style="color: #64748b; font-size: 0.95rem; line-height: 1.6; margin: 0;">Sistem sedang menghubungkan ke server dan menginisialisasi sesi ujian terenkripsi. Mohon tunggu sebentar...</p>
+        <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; margin-top: 1rem; position: relative;">
+          <div style="width: 50%; height: 100%; background: linear-gradient(90deg, #4f46e5, #3b82f6); border-radius: 9999px; position: absolute; top: 0; left: 0; animation: loadingBar 1.5s infinite ease-in-out;"></div>
+        </div>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <h1 id="exam-title">Ujian</h1>
+      <div class="timer" id="exam-timer">--:--</div>
+    </header>
+
+    <main class="exam-layout container">
+      <div class="exam-main">
+        <section class="card">
+          <div class="q-meta">
+            <strong id="question-progress">Soal 0/0</strong>
+          </div>
+          <article id="question-container">
+            <div style="text-align: center; padding: 4rem 2rem; color: #64748b; font-family: 'Outfit', sans-serif;">
+              <div class="anti-cheat-icon" style="font-size: 2.5rem; margin-bottom: 1rem;">⏳</div>
+              <div style="font-weight: 600; font-size: 1.1rem; color: var(--brand);">Sedang memuat soal...</div>
+              <div style="font-size: 0.85rem; margin-top: 0.5rem; color: #94a3b8;">Menghubungkan ke sesi ujian aman...</div>
+            </div>
+          </article>
+        </section>
+
+        <section class="actions">
+          <button id="prev-btn" type="button">Sebelumnya</button>
+          <button id="flag-btn" type="button" class="flag-btn">🚩 Ragu</button>
+          <button id="next-btn" type="button">Berikutnya</button>
+          <button id="submit-btn" type="button" class="danger">Submit</button>
+        </section>
+      </div>
+
+      <aside class="exam-sidebar card" id="exam-sidebar">
+        <div class="sidebar-header-map">
+          <h3>Peta Soal</h3>
+          <button
+            type="button"
+            id="toggle-map-btn"
+            class="toggle-map-btn"
+            aria-label="Sembunyikan peta soal"
+            aria-expanded="true"
+            aria-controls="sidebar-map-body"
+            title="Sembunyikan peta soal"
+          >
+            <span class="toggle-map-icon" aria-hidden="true">◀</span>
+          </button>
+        </div>
+
+        <!-- Tab yang muncul saat sidebar collapsed -->
+        <div class="sidebar-collapsed-tab" id="sidebar-collapsed-tab" aria-hidden="true">
+          <span class="collapsed-label">Peta Soal</span>
+          <div class="collapsed-divider"></div>
+          <button
+            type="button"
+            class="collapsed-expand-btn"
+            id="expand-map-btn"
+            aria-label="Tampilkan peta soal"
+            title="Tampilkan peta soal"
+          >
+            <span aria-hidden="true">▶</span>
+          </button>
+        </div>
+
+        <div id="sidebar-map-body" class="sidebar-map-body">
+          <div id="question-map" class="question-map-grid"></div>
+          <div class="map-legend">
+            <div class="legend-item"><span class="legend-dot legend-dot--default"></span>Belum</div>
+            <div class="legend-item"><span class="legend-dot legend-dot--answered"></span>Dijawab</div>
+            <div class="legend-item"><span class="legend-dot legend-dot--flagged"></span>Ragu</div>
+            <div class="legend-item"><span class="legend-dot legend-dot--active"></span>Aktif</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <p id="exam-feedback" class="feedback" role="status" aria-live="polite"></p>
+
+    <!-- Modal Konfirmasi Submit -->
+    <div id="confirm-modal" class="modal hidden" aria-hidden="true" role="dialog">
+      <div class="modal-content card" style="max-width: 450px; text-align: center; padding: 2.5rem; border-radius: 20px;">
+        <div style="font-size: 3.5rem; margin-bottom: 1rem;">📝</div>
+        <h2 style="color: var(--brand); margin-top: 0; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.6rem;">Konfirmasi Selesai</h2>
+        <p id="confirm-modal-desc" style="color: #64748b; line-height: 1.6; font-size: 0.95rem; margin-bottom: 2rem; font-family: 'Outfit', sans-serif;"></p>
+        <div style="display: flex; gap: 1rem; justify-content: center;">
+          <button type="button" id="confirm-cancel-btn" class="secondary" style="padding: 0.75rem 1.75rem; font-weight: 600; border-radius: 12px; cursor: pointer; border: 1.5px solid var(--border);">Batal</button>
+          <button type="button" id="confirm-submit-btn" style="padding: 0.75rem 1.75rem; font-weight: 700; border-radius: 12px; cursor: pointer; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: white; border: none; box-shadow: 0 8px 16px rgba(79, 70, 229, 0.2);">Ya, Kirim</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Selamat Selesai Ujian -->
+    <div id="congrats-modal" class="modal hidden" aria-hidden="true" role="dialog">
+      <div class="modal-content card" style="max-width: 450px; text-align: center; padding: 2.5rem; border-radius: 20px;">
+        <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎉</div>
+        <h2 style="color: var(--success); margin-top: 0; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.6rem;">ASAT MTL selesai!</h2>
+        <p id="congrats-modal-desc" style="color: #64748b; line-height: 1.6; font-size: 0.95rem; margin-bottom: 2rem; font-family: 'Outfit', sans-serif;">
+          Selamat! Kamu sudah menyelesaikan ASAT MTL dengan baik. Semoga kamu mendapatkan hasil yang terbaik ya. Aamiin.
+        </p>
+        <div style="display: flex; gap: 1rem; justify-content: center;">
+          <button type="button" id="congrats-ok-btn" style="padding: 0.75rem 2rem; font-weight: 700; border-radius: 12px; cursor: pointer; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2); width: 100%;">Kembali ke Dashboard</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Pengiriman Ujian -->
+    <div id="submitting-overlay" class="modal hidden" aria-hidden="true" role="dialog" style="z-index: 999999;">
+      <div class="modal-content card" style="max-width: 450px; text-align: center; padding: 2.5rem; border-radius: 20px;">
+        <div style="font-size: 3.5rem; margin-bottom: 1rem; animation: pulse 2s infinite;">📤</div>
+        <h2 style="color: var(--brand); margin-top: 0; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.6rem;">Mengirim Jawaban</h2>
+        <p id="submitting-status" style="color: #64748b; line-height: 1.6; font-size: 0.95rem; margin-bottom: 1.5rem; font-family: 'Outfit', sans-serif;">
+          Sedang menyimpan dan memproses seluruh jawaban Anda ke server...
+        </p>
+        <div id="offline-submit-warning" style="display: none; background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 1rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.5; text-align: left; margin-top: 1rem; font-family: 'Outfit', sans-serif;">
+          ⚠️ <strong>Koneksi Terputus/Offline</strong><br>
+          Jangan tutup halaman ini! Jawaban Anda aman di penyimpanan lokal (localStorage) dan akan terkirim otomatis begitu internet tersambung kembali.
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/js/pages/examPage.js"></script>
+  </body>
+</html>

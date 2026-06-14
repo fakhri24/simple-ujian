@@ -1,0 +1,182 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthed() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthed()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Toleransi selisih jam client vs server (endTime dihitung dengan Date.now() di client)
+    function clockSkewMs() {
+      return 5 * 60 * 1000;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.role == 'siswa'
+      );
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sessionId', 'lastActiveAt'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /exams/{examId} {
+      allow read: if isAuthed() && (
+        isAdmin() ||
+        (resource.data.active == true && (
+          !('visibility' in resource.data) ||
+          resource.data.visibility == 'public' ||
+          (resource.data.visibility == 'private' && request.auth.uid in resource.data.assignedTo)
+        ))
+      );
+      allow write: if isAdmin();
+    }
+
+    match /questions/{questionId} {
+      // Dokumen soal publik tidak memuat kunci jawaban (options[].isCorrect,
+      // statements[].isCorrect, matchPairs) sehingga aman dibaca oleh siswa yang login.
+      allow read: if isAuthed();
+      allow write: if isAdmin();
+    }
+
+    match /exam_keys/{examId} {
+      // Kunci jawaban hanya dapat dibaca oleh Admin atau siswa yang status ujiannya
+      // sudah 'submitted' atau 'blocked' (ujian selesai).
+      allow read: if isAuthed() && isAdmin();
+      allow read: if isAuthed() &&
+        exists(/databases/$(database)/documents/exam_attempts/$(examId + '_' + request.auth.uid)) &&
+        get(/databases/$(database)/documents/exam_attempts/$(examId + '_' + request.auth.uid)).data.status in ['submitted', 'blocked'];
+      allow write: if isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      // isAdmin() diperlukan untuk fitur force-submit/unblock (adminPage menulis
+      // submission dengan userId milik siswa).
+      // CATATAN: totalScore/breakdown masih dihitung di client dan tidak dapat
+      // divalidasi ulang oleh rules; validasi nilai membutuhkan Cloud Function.
+      allow create: if isAdmin() || (
+        isAuthed() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.examId is string &&
+        request.resource.data.totalScore is number &&
+        request.resource.data.breakdown is list &&
+        request.resource.data.answersByQuestionId is map &&
+        // Submission harus terkait attempt yang benar-benar pernah dimulai siswa ini
+        exists(/databases/$(database)/documents/exam_attempts/$(request.resource.data.examId + '_' + request.auth.uid))
+      );
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /exam_attempts/{attemptId} {
+      function examOf(examId) {
+        return get(/databases/$(database)/documents/exams/$(examId)).data;
+      }
+
+      function examDurationMs(exam) {
+        return (exam.get('durationMinutes', 30) is number ? exam.get('durationMinutes', 30) : 30) * 60 * 1000;
+      }
+
+      // Ujian dapat diakses siswa: aktif + sesuai visibility (cermin rule baca /exams)
+      function examAccessible(exam) {
+        return exam.get('active', false) == true && (
+          !('visibility' in exam) ||
+          exam.visibility == 'public' ||
+          (exam.visibility == 'private' && request.auth.uid in exam.get('assignedTo', []))
+        );
+      }
+
+      // Batas akhir mulai (jika ada dan bertipe timestamp) belum terlewati
+      function withinStartWindow(exam) {
+        return !('latestStartTime' in exam)
+          || !(exam.latestStartTime is timestamp)
+          || request.time <= exam.latestStartTime;
+      }
+
+      // Attempt baru/reset retake harus mulai dari nol dengan endTime yang masuk akal:
+      // tidak boleh melebihi waktu server + durasi ujian + toleransi jam client
+      function isFreshAttempt(exam) {
+        return request.resource.data.userId == request.auth.uid
+          && request.resource.data.status == 'ongoing'
+          && request.resource.data.get('cheatingCount', 0) == 0
+          && request.resource.data.get('cheatingLogs', []).size() == 0
+          && request.resource.data.get('extraMinutes', 0) == 0
+          && request.resource.data.endTime is number
+          && request.resource.data.endTime <= request.time.toMillis() + examDurationMs(exam) + clockSkewMs();
+      }
+
+      function changedKeys() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+
+      allow read: if isAuthed() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isAdmin() || (
+        isAuthed() &&
+        attemptId == request.resource.data.examId + '_' + request.auth.uid &&
+        examAccessible(examOf(request.resource.data.examId)) &&
+        withinStartWindow(examOf(request.resource.data.examId)) &&
+        isFreshAttempt(examOf(request.resource.data.examId))
+      );
+
+      allow update: if isAdmin() || (
+        isAuthed() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        (
+          // Pengerjaan berlangsung: siswa hanya boleh menulis jawaban, status,
+          // dan catatan kecurangan. endTime/startedAt/questionIds terkunci.
+          (
+            resource.data.status == 'ongoing' &&
+            changedKeys().hasOnly(['answersByQuestionId', 'status', 'cheatingCount', 'cheatingLogs']) &&
+            (
+              request.resource.data.status == 'ongoing' ||
+              request.resource.data.status == 'blocked' ||
+              request.resource.data.status == 'submitted'
+            ) &&
+            // Jawaban hanya boleh diubah selama waktu ujian (+ toleransi jam)
+            (
+              !changedKeys().hasAny(['answersByQuestionId']) ||
+              request.time.toMillis() <= resource.data.endTime + clockSkewMs()
+            ) &&
+            // Catatan kecurangan hanya boleh bertambah, tidak boleh dihapus/di-reset
+            (
+              !changedKeys().hasAny(['cheatingCount']) ||
+              request.resource.data.cheatingCount > resource.data.get('cheatingCount', 0)
+            ) &&
+            (
+              !changedKeys().hasAny(['cheatingLogs']) ||
+              request.resource.data.cheatingLogs.size() > resource.data.get('cheatingLogs', []).size()
+            )
+          ) ||
+          // Retake: hanya jika ujian mengizinkan multi-attempt, masih dalam
+          // jendela mulai, dan attempt di-reset penuh (bukan melanjutkan sisa waktu lama)
+          (
+            resource.data.status == 'submitted' &&
+            request.resource.data.examId == resource.data.examId &&
+            examOf(resource.data.examId).get('allowMultipleAttempts', true) == true &&
+            examAccessible(examOf(resource.data.examId)) &&
+            withinStartWindow(examOf(resource.data.examId)) &&
+            isFreshAttempt(examOf(resource.data.examId))
+          )
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+  }
+}
