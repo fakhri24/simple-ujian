@@ -1,6 +1,7 @@
 import { logout } from "../auth.js";
 import { listActiveExams, findSubmission, getExamAttempt, getSubmissionsForUser, getExamAttemptsForUser, getUserProfile } from "../db.js";
 import { requireRole } from "../rbac.js";
+import { isSEB } from "../seb-utils.js";
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -219,7 +220,11 @@ const renderPagination = (totalItems) => {
 
 document.querySelector("#logout-btn")?.addEventListener("click", async () => {
   await logout();
-  window.location.replace("/");
+  if (isSEB) {
+    window.location.replace("/pages/exit-seb.html");
+  } else {
+    window.location.replace("/");
+  }
 });
 
 const hideGlobalLoading = () => {

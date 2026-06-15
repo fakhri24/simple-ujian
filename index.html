@@ -11,36 +11,75 @@
       <section class="card">
         <h1>Simple Ujian</h1>
 
-        <form id="login-form" class="stack">
-          <label for="email">Email</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autocomplete="email"
-          />
+        <!-- Loading State during browser check -->
+        <div id="seb-loading" class="stack" style="text-align: center; padding: 1.5rem 0;">
+          <div style="font-size: 2rem; animation: rotate 2s linear infinite;">⏳</div>
+          <p style="color: var(--muted); margin: 0.5rem 0 0 0;">Memeriksa keamanan browser...</p>
+        </div>
 
-          <label for="password">Password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            autocomplete="current-password"
-          />
+        <!-- SEB Warning & Download Container (Hidden by default) -->
+        <div id="seb-warning-container" class="stack" style="display: none; text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 0.5rem;">🔒</div>
+          <h2 style="margin: 0; font-size: 1.4rem; color: var(--text);">Safe Exam Browser Diperlukan</h2>
+          <p style="color: var(--muted); font-size: 0.95rem; line-height: 1.6; margin: 0.75rem 0 1.5rem 0;">
+            Untuk menjaga integritas dan mencegah kecurangan, ujian ini hanya dapat diakses melalui <strong>Safe Exam Browser (SEB)</strong>. Silakan unduh konfigurasi di bawah ini untuk memulai.
+          </p>
 
-          <button type="submit">Masuk</button>
-        </form>
+          <a href="/simple-ujian.seb" class="link-btn" download="simple-ujian.seb" style="width: 100%; margin-bottom: 1rem;">
+            Unduh Konfigurasi Ujian (.seb)
+          </a>
+
+          <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted);">
+            Belum memiliki aplikasi SEB? <br>
+            <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noopener" style="color: var(--brand); text-decoration: none; font-weight: 600;">Unduh Aplikasi Resmi SEB</a>
+          </div>
+        </div>
+
+         <!-- Login Form Container (Hidden by default) -->
+        <div id="login-container" style="display: none;">
+          <div id="seb-active-banner" style="background: var(--brand-light); border-left: 4px solid var(--brand); padding: 0.75rem; border-radius: 8px; font-size: 0.85rem; color: var(--brand); margin-bottom: 1rem; font-weight: 500; text-align: center;">
+            ✓ Safe Exam Browser Aktif & Aman
+          </div>
+
+          <form id="login-form" class="stack">
+            <label for="email">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autocomplete="email"
+            />
+
+            <label for="password">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              autocomplete="current-password"
+            />
+
+            <button type="submit" style="width: 100%;">Masuk</button>
+          </form>
+        </div>
 
         <p
           id="login-feedback"
           class="feedback"
           role="status"
           aria-live="polite"
+          style="margin-top: 1rem;"
         ></p>
       </section>
     </main>
+
+    <!-- Keyframe animation in index.html for loading rotation -->
+    <style>
+      @keyframes rotate {
+        100% { transform: rotate(360deg); }
+      }
+    </style>
 
     <script type="module" src="/js/pages/loginPage.js"></script>
   </body>
