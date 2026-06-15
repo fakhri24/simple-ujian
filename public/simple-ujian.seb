@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>allowPreferencesWindow</key>
+	<false/>
+	<key>allowQuit</key>
+	<true/>
+	<key>allowReload</key>
+	<true/>
+	<key>browserViewMode</key>
+	<integer>0</integer>
+	<key>hashedAdminPassword</key>
+	<string>3eb3fe66b31e3b4d10fa70b5cad49c7112294af6ae4e476a1c405155d45aa121</string>
+	<key>hashedQuitPassword</key>
+	<string>9937a2dbc9e2fcca68d5430369212e9b35fdea7c6aa398903e0f79358c19df97</string>
+	<key>ignoreQuitPassword</key>
+	<false/>
+	<key>insideSebEnableQuit</key>
+	<true/>
+	<key>quitURL</key>
+	<string>http://localhost:5173/pages/exit-seb.html</string>
+	<key>quitURLConfirm</key>
+	<false/>
+	<key>sendBrowserExamKey</key>
+	<false/>
+	<key>showReloadButton</key>
+	<true/>
+	<key>startURL</key>
+	<string>http://localhost:5173/</string>
+</dict>
+</plist>

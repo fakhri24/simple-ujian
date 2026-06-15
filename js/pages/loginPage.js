@@ -6,6 +6,26 @@ import {
 } from "../auth.js";
 import { roles } from "../app-config.js";
 
+// Detect if running inside Safe Exam Browser
+const isSEB = !!(
+  window.SafeExamBrowser ||
+  navigator.userAgent.includes("SEB") ||
+  navigator.userAgent.includes("SafeExamBrowser")
+);
+
+// Check if running on macOS or iPad (iOS)
+const isMacOSOrIPad = () => {
+  const ua = navigator.userAgent.toLowerCase();
+  return (
+    ua.includes("macintosh") ||
+    ua.includes("mac os") ||
+    ua.includes("ipad") ||
+    (navigator.maxTouchPoints > 0 && ua.includes("mac"))
+  );
+};
+
+const enforceSEB = isMacOSOrIPad();
+
 const feedbackEl = document.querySelector("#login-feedback");
 const loginForm = document.querySelector("#login-form");
 
@@ -69,5 +89,35 @@ const checkSessionErrors = () => {
   }
 };
 
-checkSessionErrors();
-ensureAlreadyLoggedIn();
+// Initialize page based on SEB presence
+const init = () => {
+  const loadingEl = document.querySelector("#seb-loading");
+  const warningEl = document.querySelector("#seb-warning-container");
+  const loginContainerEl = document.querySelector("#login-container");
+  const activeBannerEl = document.querySelector("#seb-active-banner");
+
+  if (loadingEl) {
+    loadingEl.style.display = "none";
+  }
+
+  // If SEB is not enforced (e.g. Windows), or if enforced and user is running SEB:
+  if (!enforceSEB || isSEB) {
+    if (warningEl) warningEl.style.display = "none";
+    if (loginContainerEl) loginContainerEl.style.display = "block";
+    
+    // Hide active banner if they are not actually running SEB (e.g. Windows Chrome)
+    if (activeBannerEl && !isSEB) {
+      activeBannerEl.style.display = "none";
+    }
+    
+    checkSessionErrors();
+    ensureAlreadyLoggedIn();
+  } else {
+    // If SEB is enforced (macOS/iPad) but not running inside SEB:
+    if (warningEl) warningEl.style.display = "flex";
+    if (loginContainerEl) loginContainerEl.style.display = "none";
+  }
+};
+
+// Start the check after a slight delay to ensure user-agent / window properties are populated
+setTimeout(init, 500);

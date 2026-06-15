@@ -219,7 +219,16 @@ const renderPagination = (totalItems) => {
 
 document.querySelector("#logout-btn")?.addEventListener("click", async () => {
   await logout();
-  window.location.replace("/");
+  const isSEB = !!(
+    window.SafeExamBrowser ||
+    navigator.userAgent.includes("SEB") ||
+    navigator.userAgent.includes("SafeExamBrowser")
+  );
+  if (isSEB) {
+    window.location.replace("/pages/exit-seb.html");
+  } else {
+    window.location.replace("/");
+  }
 });
 
 const hideGlobalLoading = () => {

@@ -22,7 +22,7 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
       }
     });
 
-    // 2. Inject initial mock offline navigator override
+    // 2. Inject initial mock offline navigator override and SEB mock
     await context.addInitScript(() => {
       Object.defineProperty(navigator, 'onLine', {
         get() {
@@ -30,6 +30,8 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
         },
         configurable: true
       });
+      // Mock SafeExamBrowser to bypass login/rbac check during E2E tests
+      window.SafeExamBrowser = { version: "PlaywrightMock" };
     });
 
     // 3. Log in as a student

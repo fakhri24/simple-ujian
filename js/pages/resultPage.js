@@ -10,6 +10,7 @@ const breakdownEl = document.querySelector("#result-breakdown");
 const params = new URLSearchParams(window.location.search);
 const submissionId = params.get("submissionId");
 
+
 const translateStatus = (status) => {
   switch (status) {
     case "correct":
@@ -87,7 +88,7 @@ const bootstrap = async () => {
                 <p style="font-size: 1.05rem; color: #64748b; max-width: 480px; margin: 0 auto 2.5rem auto; line-height: 1.7;">
                   Nilai dan detail lembar jawaban untuk ujian ini disembunyikan oleh Guru/Administrator Anda sesuai dengan kebijakan pelaksanaan ujian.
                 </p>
-                <a href="/pages/student.html" class="link-btn" style="text-decoration: none; padding: 0.85rem 2rem; font-size: 1rem; border-radius: 12px;">Kembali ke Dashboard</a>
+                <a id="dashboard-back-btn" href="/pages/student.html" class="link-btn" style="text-decoration: none; padding: 0.85rem 2rem; font-size: 1rem; border-radius: 12px;">Kembali ke Dashboard</a>
               </div>
             `;
             return;
