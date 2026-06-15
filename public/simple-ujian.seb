@@ -19,7 +19,7 @@
 	<key>insideSebEnableQuit</key>
 	<true/>
 	<key>quitURL</key>
-	<string>http://localhost:5173/pages/exit-seb.html</string>
+	<string>https://simple-ujian.web.app/pages/exit-seb.html</string>
 	<key>quitURLConfirm</key>
 	<false/>
 	<key>sendBrowserExamKey</key>
@@ -27,6 +27,6 @@
 	<key>showReloadButton</key>
 	<true/>
 	<key>startURL</key>
-	<string>http://localhost:5173/</string>
+	<string>https://simple-ujian.web.app/</string>
 </dict>
 </plist>
