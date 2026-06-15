@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>allowPreferencesWindow</key>
+	<true/>
+	<key>allowQuit</key>
+	<true/>
+	<key>allowReload</key>
+	<true/>
+	<key>browserViewMode</key>
+	<integer>0</integer>
+	<key>hashedAdminPassword</key>
+	<string></string>
+	<key>hashedQuitPassword</key>
+	<string></string>
+	<key>ignoreQuitPassword</key>
+	<true/>
+	<key>insideSebEnableQuit</key>
+	<true/>
+	<key>quitURL</key>
+	<string>https://simple-ujian.web.app/pages/exit-seb.html</string>
+	<key>quitURLConfirm</key>
+	<false/>
+	<key>sendBrowserExamKey</key>
+	<false/>
+	<key>showReloadButton</key>
+	<true/>
+	<key>startURL</key>
+	<string>https://simple-ujian.web.app/</string>
+</dict>
+</plist>
