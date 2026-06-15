@@ -6,25 +6,7 @@ import {
 } from "../auth.js";
 import { roles } from "../app-config.js";
 
-// Detect if running inside Safe Exam Browser
-const isSEB = !!(
-  window.SafeExamBrowser ||
-  navigator.userAgent.includes("SEB") ||
-  navigator.userAgent.includes("SafeExamBrowser")
-);
-
-// Check if running on macOS or iPad (iOS)
-const isMacOSOrIPad = () => {
-  const ua = navigator.userAgent.toLowerCase();
-  return (
-    ua.includes("macintosh") ||
-    ua.includes("mac os") ||
-    ua.includes("ipad") ||
-    (navigator.maxTouchPoints > 0 && ua.includes("mac"))
-  );
-};
-
-const enforceSEB = isMacOSOrIPad();
+import { isSEB, enforceSEB } from "../seb-utils.js";
 
 const feedbackEl = document.querySelector("#login-feedback");
 const loginForm = document.querySelector("#login-form");
