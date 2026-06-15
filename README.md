@@ -60,15 +60,36 @@ firestore.rules      # Firestore security rules
 scripts/             # skrip seed & utilitas (firebase-admin)
 ```
 
+## Integrasi Safe Exam Browser (SEB)
+
+Untuk meningkatkan keamanan ujian pada perangkat macOS dan iOS/iPad, sistem CBT ini terintegrasi dengan **Safe Exam Browser (SEB)**. Pengguna Windows tetap diizinkan menggunakan browser biasa demi kepraktisan (karena ukuran aplikasi SEB yang cukup besar).
+
+### Alur Kerja & Deteksi Platform
+1. **Deteksi Otomatis:** Halaman login mendeteksi sistem operasi siswa secara otomatis.
+   - **macOS & iOS/iPad:** Siswa wajib menggunakan SEB. Jika membuka di browser biasa, mereka akan dihalangi dan diberikan tautan untuk mengunduh aplikasi resmi SEB serta file konfigurasi ujian (`.seb`).
+   - **Windows / OS Lain:** Bebas masuk menggunakan browser biasa (seperti Google Chrome).
+2. **Keluar SEB Aman (Smart Logout):**
+   - Siswa tetap bisa kembali dari halaman hasil ujian ke dashboard daftar ujian.
+   - Penutupan SEB secara otomatis dipicu ketika siswa menekan tombol **Logout** pada dashboard siswa (`student.html`).
+   - Jika siswa mencoba keluar SEB secara paksa menggunakan tombol bawaan SEB atau shortcut (`Alt+F4` / `Cmd+Q`), mereka harus memasukkan **Quit Password** pengawas.
+
+### Kredensial Konfigurasi SEB (`.seb`)
+File konfigurasi ujian tersimpan di [public/simple-ujian.seb](file:///Users/fakhri246/project/ujian/simple-ujian/public/simple-ujian.seb). Berikut adalah kredensial pengamanannya:
+* **Admin Password:** `Admin123!` (digunakan jika ingin mengedit setelan konfigurasi SEB).
+* **Quit Password (Pengawas):** `Rahasia123!` (digunakan untuk keluar darurat/manual dari SEB sebelum logout).
+* **Start URL:** `http://localhost:5173/` (dapat disesuaikan jika ingin di-deploy ke production, misalnya `https://simple-ujian.web.app/`).
+* **Quit URL:** `http://localhost:5173/pages/exit-seb.html` (URL pemicu exit otomatis tanpa password).
+
 ## Firestore Rules
 
 `firestore.rules` menerapkan kebijakan berbasis peran: admin menulis `exams`/`questions`, siswa hanya menulis attempt & submission miliknya sendiri dengan validasi waktu dan status. Deploy:
 
 ```bash
-firebase deploy --only firestore:rules
+npx -y firebase-tools@latest deploy --only firestore:rules
 ```
 
 ## Catatan Keamanan
 
 - File sensitif (`.env`, `users.json`, service account, daftar password) **tidak** di-commit — lihat `.gitignore`.
 - Penilaian saat ini dihitung di sisi client; pemindahan ke Cloud Function direncanakan agar kunci jawaban tidak terekspos ke siswa.
+
