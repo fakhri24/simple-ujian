@@ -88,6 +88,10 @@ File konfigurasi ujian tersimpan di [public/simple-ujian.seb](file:///Users/fakh
 npx -y firebase-tools@latest deploy --only firestore:rules
 ```
 
+## Limitasi yang Diketahui
+
+- **Impor Word: Gambar crop tidak terbaca** — gambar yang di-crop di MS Word akan diimpor dalam kondisi utuh (tanpa crop). Lihat [docs/word-import-limitations.md](docs/word-import-limitations.md) untuk detail dan workaround.
+
 ## Catatan Keamanan
 
 - File sensitif (`.env`, `users.json`, service account, daftar password) **tidak** di-commit — lihat `.gitignore`.
