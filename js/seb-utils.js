@@ -21,4 +21,6 @@ export const isMacOSOrIPad = () => {
 };
 
 // Check if the current browser environment enforces SEB (macOS and iPad)
-export const enforceSEB = isMacOSOrIPad();
+// TEMPORARILY DISABLED for testing — re-enable before production
+// export const enforceSEB = isMacOSOrIPad();
+export const enforceSEB = false;

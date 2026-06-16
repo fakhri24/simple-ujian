@@ -1,11 +1,11 @@
 import { getCurrentUser, resolveUserRole, waitForAuthReady } from "./auth.js";
 import { verifyAndStartSession, handleAutomaticLogout } from "./session.js";
-import { isSEB, isMacOSOrIPad } from "./seb-utils.js";
+import { isSEB, enforceSEB } from "./seb-utils.js";
 
 export const requireRole = async (role, redirectPath = "/") => {
   // Check if running inside Safe Exam Browser for student role
   if (role === "siswa") {
-    if (isMacOSOrIPad()) {
+    if (enforceSEB) {
       if (!isSEB) {
         window.location.replace(redirectPath);
         return null;
