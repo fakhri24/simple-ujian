@@ -168,8 +168,11 @@ diverifikasi tersedia: `x-forwarded-host`, `x-forwarded-proto`,
 2. Buat `nonce` acak; simpan `seb_challenges/{nonce}` (TTL 60 dtk).
 3. Balas `{ nonce }`.
 
-Status: [x] kode `functions/index.js` (`validateSEB`) ditulis + rewrite
-`/validateSEB` di `firebase.json`. [ ] set secret `SEB_CONFIG_KEY` + deploy.
+Status: [x] kode + rewrite. [x] secret `SEB_CONFIG_KEY` di-set. [x] deployed
+(`validateSEB` live, auth-gate OK, rewrite OK). [ ] **MENUNGGU tes E2E** dari
+SEB modern-WebView via `seb-check.html` (bagian B) → buktikan ConfigKey cocok
+(`ok:true`) sebelum Fase 3. Catatan: tes ini menulis doc diagnostik
+`exam_clearance/{uid}___seb_diag__` (boleh dihapus nanti).
 
 **Langkah B — verify** (`POST /validateSEB`, body
 `{ examId, nonce, configKeyHash, pageUrl }` hasil `SafeExamBrowser.security.configKey`):
@@ -183,28 +186,38 @@ Status: [x] kode `functions/index.js` (`validateSEB`) ditulis + rewrite
 
 ---
 
-## Fase 3 — Firestore Rules + integrasi client
+## Fase 3 — Firestore Rules + integrasi client  [SELESAI, ter-deploy]
 
-1. `firestore.rules`: tambah helper `hasClearance(examId)` (exists + belum
-   kedaluwarsa). Pasang sebagai syarat: `exam_attempts` create (siswa),
-   pembacaan `questions` (siswa), jalur baca `exam_keys` siswa. Hati-hati agar
-   admin tidak terblokir. Tambah deny tulis `exam_clearance`/`seb_challenges`
-   untuk client (hanya Function via Admin SDK).
-2. Client: saat "Mulai Ujian" → challenge (dapat nonce) → buka
-   `exam.html?examId=X&nonce=N`. Di `examPage.js`, sebelum
-   `initializeExamAttempt`: feature-detect SEB JS API; baca configKey (JS API)
-   atau andalkan header; panggil verify. Gagal → tampilkan "Konfigurasi SEB
-   tidak sah" dan stop.
+Keputusan: enforcement **per-ujian** lewat flag `requireSEB` (bukan global).
+
+1. [x] `firestore.rules`: helper `hasClearance(examId)` + `examRequiresSEB(exam)`.
+   Syarat clearance dipasang pada `exam_attempts` **create** dan cabang **retake**
+   (`update`), HANYA jika `examRequiresSEB`. Tambah match `exam_clearance`
+   (read: pemilik/admin; write: false) & `seb_challenges` (read,write: false).
+2. [x] Client: `js/seb-validate.js` (`ensureSEBClearance`) — challenge → reload
+   `?seb_nonce=N` → baca `SafeExamBrowser.security.configKey` → verify. Dipanggil
+   di `examPage.js` bootstrap pada skenario mulai-baru (bukan resume); gagal →
+   `showFatalError`. Skip otomatis jika `exam.requireSEB !== true`.
+3. [x] Admin UI: toggle "Wajib Safe Exam Browser" di form buat & edit
+   (`pages/admin.html` + `adminPage.js`) → simpan `requireSEB`.
+4. [x] TTL clearance dinaikkan ke 30 mnt (jeda baca instruksi sebelum "Mulai").
 
 ---
 
-## Fase 4 — Aktifkan & uji end-to-end
+## Fase 4 — Uji end-to-end & cleanup
 
-1. `js/seb-utils.js`: kembalikan `enforceSEB = isMacOSOrIPad()` (kini `false`).
-2. `.seb` produksi: pastikan pengiriman **Config Key** aktif; catat ConfigKey
-   & daftarkan ke secret. (BEK tidak dipakai.)
-3. Uji di **macOS dan iPad**: SEB asli (lolos) vs config dimanipulasi (ditolak)
-   vs Chrome biasa (ditolak).
+1. [ ] Uji E2E alur ujian nyata:
+   - Admin: buat/edit ujian → "Wajib Safe Exam Browser" = Ya.
+   - Siswa di SEB modern WebView (macOS & iPad): buka ujian → tervalidasi
+     (reload nonce) → bisa "Mulai" & kerjakan normal.
+   - Siswa TANPA SEB / config dimanipulasi: diblokir saat buka ujian.
+   - Ujian `requireSEB=false`: tetap jalan tanpa SEB (regression).
+2. [ ] (Opsional) `js/seb-utils.js`: `enforceSEB = isMacOSOrIPad()` untuk gate
+   login lemah (UX). Catatan: enforcement kuat sudah ditangani per-ujian via
+   `requireSEB`, jadi ini hanya pelengkap UX.
+3. [ ] Cleanup setelah lolos: hapus link `<!-- TEMP-SEB-DIAG -->` di
+   `index.html`, halaman `public/pages/seb-check.html`, Function `sebEcho` +
+   rewrite-nya, dan doc diagnostik `exam_clearance/{uid}___seb_diag__`.
 
 ---
 

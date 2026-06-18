@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SEB Check (Fase 0 / 0b)</title>
+  <title>SEB Check (Fase 0 / 2)</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 24px; line-height: 1.5; max-width: 900px; }
     h2 { margin-top: 28px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
@@ -12,123 +12,174 @@
     .bad { background: #fee2e2; color: #991b1b; }
     .warn { background: #fef9c3; color: #854d0e; }
     pre { background: #f1f5f9; padding: 12px; border-radius: 8px; overflow: auto; font-size: 0.8rem; }
-    button { font-size: 1rem; padding: 10px 18px; border-radius: 8px; cursor: pointer; }
+    button { font-size: 1rem; padding: 10px 18px; border-radius: 8px; cursor: pointer; margin: 4px 0; }
+    input { font-size: 1rem; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
     code { background: #e2e8f0; padding: 1px 4px; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <h1>SEB Check — Fase 0 / 0b</h1>
-  <p>Halaman ini menguji <strong>dua jalur</strong> sekaligus dari dalam Safe Exam
-  Browser: <strong>(1) SEB JavaScript API</strong> (jalur yang akan kita pakai —
-  wajib SEB 3.0+) dan <strong>(2) HTTP header</strong> (jalur lama, lewat
-  <code>/sebEcho</code>). Buka dari dalam SEB, lalu klik tombol.</p>
+  <h1>SEB Check — Fase 0 / 2</h1>
 
-  <button id="run">Jalankan kedua tes</button>
-
-  <h2>1. SEB JavaScript API <small>(jalur target)</small></h2>
+  <h2>A. Diagnostik transport</h2>
+  <button id="run">Jalankan tes transport (JS API + header)</button>
   <div id="api-verdict" class="verdict" style="display:none"></div>
   <pre id="api"></pre>
-
-  <h2>2. HTTP header <small>(jalur lama, via /sebEcho fetch)</small></h2>
   <div id="hdr-verdict" class="verdict" style="display:none"></div>
   <pre id="hdr"></pre>
+
+  <h2>B. Tes E2E backend <small>(validateSEB challenge → verify)</small></h2>
+  <p>Membuktikan ConfigKey di server cocok dengan JS API. Login dulu (akun siswa),
+  lalu klik. Halaman akan reload sekali dengan nonce di URL.</p>
+  <div id="auth-area"></div>
+  <div id="e2e-verdict" class="verdict" style="display:none"></div>
+  <pre id="e2e"></pre>
 
   <h2>User-Agent</h2>
   <pre id="ua"></pre>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+      from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD6aFkE8CEYA7ACXlF--BMV7XLkfi4fvWI",
+      authDomain: "simple-ujian.firebaseapp.com",
+      projectId: "simple-ujian",
+      storageBucket: "simple-ujian.firebasestorage.app",
+      messagingSenderId: "133707273043",
+      appId: "1:133707273043:web:213433c1b1016f721587a6",
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const DIAG_EXAM_ID = "__seb_diag__";
     document.querySelector("#ua").textContent = navigator.userAgent;
 
-    // Baca SEB JS API. configKey/browserExamKey = SHA256(URL_halaman + key),
-    // tersedia di SEB 3.0+. Sebagian versi mengisi setelah updateKeys(cb).
-    function readJsApi() {
+    // --- baca configKey dari SEB JS API (hash dgn URL halaman) ---
+    function getConfigKeyHash() {
+      return new Promise((resolve) => {
+        const api = window.SafeExamBrowser;
+        if (!api || !api.security) return resolve(null);
+        const read = () => api.security.configKey || null;
+        if (typeof api.security.updateKeys === "function") {
+          let done = false;
+          const fin = () => { if (!done) { done = true; resolve(read()); } };
+          try { api.security.updateKeys(fin); } catch (e) {}
+          setTimeout(fin, 1500);
+        } else { resolve(read()); }
+      });
+    }
+
+    // ---------- A. Diagnostik transport ----------
+    function readJsApiSnapshot() {
       return new Promise((resolve) => {
         const api = window.SafeExamBrowser;
         const base = {
           present: !!api,
           version: api && api.version ? api.version : null,
           hasSecurity: !!(api && api.security),
-          hasUpdateKeys: !!(api && api.security && typeof api.security.updateKeys === "function"),
         };
         if (!api || !api.security) return resolve(base);
-
-        const snapshot = () => ({
-          ...base,
-          configKey: api.security.configKey || null,
-          browserExamKey: api.security.browserExamKey || null,
-        });
-
-        if (typeof api.security.updateKeys === "function") {
-          let done = false;
-          const finish = () => { if (!done) { done = true; resolve(snapshot()); } };
-          try {
-            api.security.updateKeys(finish);
-          } catch (e) {
-            base.updateKeysError = e.message;
-          }
-          // Fallback bila callback tak terpanggil
-          setTimeout(finish, 1500);
-        } else {
-          resolve(snapshot());
-        }
+        getConfigKeyHash().then((ck) => resolve({ ...base, configKey: ck }));
       });
     }
-
-    async function testHeader() {
-      const res = await fetch("/sebEcho", { cache: "no-store" });
-      const data = await res.json();
-      return data;
-    }
-
     document.querySelector("#run").addEventListener("click", async () => {
-      // --- JS API ---
       const apiV = document.querySelector("#api-verdict");
-      try {
-        const api = await readJsApi();
-        document.querySelector("#api").textContent = JSON.stringify(api, null, 2);
-        apiV.style.display = "block";
-        if (!api.present) {
-          apiV.className = "verdict bad";
-          apiV.textContent = "✗ window.SafeExamBrowser tidak ada (bukan dari dalam SEB, atau SEB tanpa JS API).";
-        } else if (api.configKey) {
-          apiV.className = "verdict ok";
-          apiV.textContent = "✓ LULUS: JS API tersedia (versi " + (api.version || "?") + ") dan configKey terisi. Desain JS-API-only siap.";
-        } else if (api.hasSecurity) {
-          apiV.className = "verdict warn";
-          apiV.textContent = "⚠ SEB JS API ada tapi configKey kosong. Cek setting Config Key di .seb / versi SEB.";
-        } else {
-          apiV.className = "verdict warn";
-          apiV.textContent = "⚠ window.SafeExamBrowser ada tapi tanpa .security (versi SEB terlalu lama untuk JS API).";
-        }
-      } catch (e) {
-        apiV.style.display = "block";
+      const api = await readJsApiSnapshot();
+      document.querySelector("#api").textContent = JSON.stringify(api, null, 2);
+      apiV.style.display = "block";
+      if (api.configKey) {
+        apiV.className = "verdict ok";
+        apiV.textContent = "✓ JS API tersedia (v" + (api.version || "?") + ") & configKey terisi.";
+      } else {
         apiV.className = "verdict bad";
-        apiV.textContent = "Error baca JS API: " + e.message;
+        apiV.textContent = "✗ JS API/configKey tidak ada (pastikan modern WebView).";
       }
-
-      // --- HTTP header ---
       const hdrV = document.querySelector("#hdr-verdict");
       try {
-        const data = await testHeader();
+        const data = await (await fetch("/sebEcho", { cache: "no-store" })).json();
         document.querySelector("#hdr").textContent = JSON.stringify(data.sebHeaders, null, 2);
-        const keys = Object.keys(data.sebHeaders || {});
-        const hasCK = keys.some(k => k.toLowerCase() === "x-safeexambrowser-configkeyhash");
         hdrV.style.display = "block";
-        if (hasCK) {
-          hdrV.className = "verdict ok";
-          hdrV.textContent = "✓ Header ConfigKeyHash ikut pada fetch (SEB ini masih mengirim header).";
-        } else if (keys.length) {
-          hdrV.className = "verdict warn";
-          hdrV.textContent = "⚠ Ada header SEB tapi tanpa ConfigKeyHash.";
+        const hasCK = Object.keys(data.sebHeaders || {}).some(k => k.toLowerCase() === "x-safeexambrowser-configkeyhash");
+        hdrV.className = "verdict " + (hasCK ? "warn" : "ok");
+        hdrV.textContent = hasCK ? "⚠ Masih ada header (classic WebView)." : "— Tidak ada header SEB (modern WebView, sesuai harapan).";
+      } catch (e) { hdrV.style.display = "block"; hdrV.className = "verdict bad"; hdrV.textContent = "Error /sebEcho: " + e.message; }
+    });
+
+    // ---------- B. E2E backend ----------
+    async function callValidate(body) {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch("/validateSEB", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify(body),
+      });
+      return { status: res.status, data: await res.json() };
+    }
+
+    async function startE2E() {
+      const e2eV = document.querySelector("#e2e-verdict");
+      e2eV.style.display = "block"; e2eV.className = "verdict warn"; e2eV.textContent = "Meminta nonce...";
+      try {
+        const { data } = await callValidate({ step: "challenge", examId: DIAG_EXAM_ID });
+        if (!data.ok) throw new Error("challenge: " + JSON.stringify(data));
+        const u = new URL(location.href);
+        u.searchParams.set("e2e_nonce", data.nonce);
+        location.href = u.toString(); // reload dgn nonce di URL → configKey ikut nonce
+      } catch (e) { e2eV.className = "verdict bad"; e2eV.textContent = "Gagal challenge: " + e.message; }
+    }
+
+    async function continueE2E(nonce) {
+      const e2eV = document.querySelector("#e2e-verdict");
+      const e2ePre = document.querySelector("#e2e");
+      e2eV.style.display = "block"; e2eV.className = "verdict warn"; e2eV.textContent = "Membaca configKey & verify...";
+      try {
+        const configKeyHash = await getConfigKeyHash();
+        if (!configKeyHash) throw new Error("configKey JS API kosong");
+        const pageUrl = location.href;
+        const { status, data } = await callValidate({ step: "verify", examId: DIAG_EXAM_ID, nonce, configKeyHash, pageUrl });
+        e2ePre.textContent = JSON.stringify({ status, pageUrl, configKeyHash, response: data }, null, 2);
+        if (data.ok) {
+          e2eV.className = "verdict ok";
+          e2eV.textContent = "✓ LULUS: server mencocokkan ConfigKey. Backend Fase 2 benar — siap Fase 3.";
+        } else if (data.error === "config_key_mismatch") {
+          e2eV.className = "verdict bad";
+          e2eV.textContent = "✗ config_key_mismatch: ConfigKey di secret TIDAK cocok dgn config .seb ini. Periksa nilai SEB_CONFIG_KEY.";
         } else {
-          hdrV.className = "verdict warn";
-          hdrV.textContent = "— Tidak ada header SEB pada fetch (wajar untuk SEB 3.x WKWebView). Cukup andalkan JS API di atas.";
+          e2eV.className = "verdict bad";
+          e2eV.textContent = "✗ Gagal: " + data.error + " (HTTP " + status + ")";
         }
-      } catch (e) {
-        hdrV.style.display = "block";
-        hdrV.className = "verdict bad";
-        hdrV.textContent = "Error /sebEcho: " + e.message;
+        // bersihkan nonce dari URL
+        const u = new URL(location.href); u.searchParams.delete("e2e_nonce");
+        history.replaceState({}, "", u.toString());
+      } catch (e) { e2eV.className = "verdict bad"; e2eV.textContent = "Error verify: " + e.message; }
+    }
+
+    function renderAuth(user) {
+      const area = document.querySelector("#auth-area");
+      if (user) {
+        area.innerHTML = `<p>Login sebagai <strong>${user.email || user.uid}</strong> ·
+          <button id="logout">logout</button></p>
+          <button id="e2e-start">Jalankan tes E2E backend</button>`;
+        document.querySelector("#logout").onclick = () => signOut(auth);
+        document.querySelector("#e2e-start").onclick = startE2E;
+      } else {
+        area.innerHTML = `<input id="email" type="email" placeholder="email siswa" />
+          <input id="pwd" type="password" placeholder="password" />
+          <button id="login">Login</button> <span id="login-err" style="color:#991b1b"></span>`;
+        document.querySelector("#login").onclick = async () => {
+          try {
+            await signInWithEmailAndPassword(auth, document.querySelector("#email").value, document.querySelector("#pwd").value);
+          } catch (e) { document.querySelector("#login-err").textContent = e.message; }
+        };
       }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+      renderAuth(user);
+      const nonce = new URLSearchParams(location.search).get("e2e_nonce");
+      if (user && nonce) continueE2E(nonce); // lanjutkan setelah reload
     });
   </script>
 </body>

@@ -31,7 +31,9 @@ const db = admin.firestore();
 const SEB_CONFIG_KEY = defineSecret("SEB_CONFIG_KEY");
 
 const NONCE_TTL_MS = 60 * 1000; // nonce berlaku 60 detik
-const CLEARANCE_TTL_MS = 10 * 60 * 1000; // tiket izin berlaku 10 menit
+// Tiket izin berlaku 30 menit: validasi terjadi saat halaman ujian dimuat,
+// siswa mungkin membaca instruksi beberapa menit sebelum menekan "Mulai".
+const CLEARANCE_TTL_MS = 30 * 60 * 1000;
 
 // Verifikasi Firebase ID token dari header Authorization: Bearer <token>.
 async function getUid(req) {

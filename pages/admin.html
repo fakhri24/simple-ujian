@@ -194,9 +194,12 @@
                         <option value="false">Tidak Aktif</option>
                       </select>
                     </div>
-                    <div class="stack" style="margin: 0; opacity: 0; pointer-events: none;">
-                      <label>&nbsp;</label>
-                      <select><option></option></select>
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-require-seb">Wajib Safe Exam Browser</label>
+                      <select id="exam-require-seb" name="requireSEB">
+                        <option value="false" selected>Tidak</option>
+                        <option value="true">Ya (validasi Config Key SEB)</option>
+                      </select>
                     </div>
                   </div>
 
@@ -752,9 +755,12 @@
                   <option value="false">Tidak Aktif</option>
                 </select>
               </div>
-              <div class="stack" style="margin: 0; opacity: 0; pointer-events: none;">
-                <label>&nbsp;</label>
-                <select><option></option></select>
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-require-seb">Wajib Safe Exam Browser</label>
+                <select id="edit-exam-require-seb" style="background: white;">
+                  <option value="false">Tidak</option>
+                  <option value="true">Ya (validasi Config Key SEB)</option>
+                </select>
               </div>
             </div>
 
