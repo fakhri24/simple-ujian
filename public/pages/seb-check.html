@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEB Check (Fase 0 / 0b)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; line-height: 1.5; max-width: 900px; }
+    h2 { margin-top: 28px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+    .verdict { font-size: 1.1rem; font-weight: 700; padding: 10px 14px; border-radius: 8px; margin: 12px 0; }
+    .ok { background: #dcfce7; color: #166534; }
+    .bad { background: #fee2e2; color: #991b1b; }
+    .warn { background: #fef9c3; color: #854d0e; }
+    pre { background: #f1f5f9; padding: 12px; border-radius: 8px; overflow: auto; font-size: 0.8rem; }
+    button { font-size: 1rem; padding: 10px 18px; border-radius: 8px; cursor: pointer; }
+    code { background: #e2e8f0; padding: 1px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>SEB Check — Fase 0 / 0b</h1>
+  <p>Halaman ini menguji <strong>dua jalur</strong> sekaligus dari dalam Safe Exam
+  Browser: <strong>(1) SEB JavaScript API</strong> (jalur yang akan kita pakai —
+  wajib SEB 3.0+) dan <strong>(2) HTTP header</strong> (jalur lama, lewat
+  <code>/sebEcho</code>). Buka dari dalam SEB, lalu klik tombol.</p>
+
+  <button id="run">Jalankan kedua tes</button>
+
+  <h2>1. SEB JavaScript API <small>(jalur target)</small></h2>
+  <div id="api-verdict" class="verdict" style="display:none"></div>
+  <pre id="api"></pre>
+
+  <h2>2. HTTP header <small>(jalur lama, via /sebEcho fetch)</small></h2>
+  <div id="hdr-verdict" class="verdict" style="display:none"></div>
+  <pre id="hdr"></pre>
+
+  <h2>User-Agent</h2>
+  <pre id="ua"></pre>
+
+  <script>
+    document.querySelector("#ua").textContent = navigator.userAgent;
+
+    // Baca SEB JS API. configKey/browserExamKey = SHA256(URL_halaman + key),
+    // tersedia di SEB 3.0+. Sebagian versi mengisi setelah updateKeys(cb).
+    function readJsApi() {
+      return new Promise((resolve) => {
+        const api = window.SafeExamBrowser;
+        const base = {
+          present: !!api,
+          version: api && api.version ? api.version : null,
+          hasSecurity: !!(api && api.security),
+          hasUpdateKeys: !!(api && api.security && typeof api.security.updateKeys === "function"),
+        };
+        if (!api || !api.security) return resolve(base);
+
+        const snapshot = () => ({
+          ...base,
+          configKey: api.security.configKey || null,
+          browserExamKey: api.security.browserExamKey || null,
+        });
+
+        if (typeof api.security.updateKeys === "function") {
+          let done = false;
+          const finish = () => { if (!done) { done = true; resolve(snapshot()); } };
+          try {
+            api.security.updateKeys(finish);
+          } catch (e) {
+            base.updateKeysError = e.message;
+          }
+          // Fallback bila callback tak terpanggil
+          setTimeout(finish, 1500);
+        } else {
+          resolve(snapshot());
+        }
+      });
+    }
+
+    async function testHeader() {
+      const res = await fetch("/sebEcho", { cache: "no-store" });
+      const data = await res.json();
+      return data;
+    }
+
+    document.querySelector("#run").addEventListener("click", async () => {
+      // --- JS API ---
+      const apiV = document.querySelector("#api-verdict");
+      try {
+        const api = await readJsApi();
+        document.querySelector("#api").textContent = JSON.stringify(api, null, 2);
+        apiV.style.display = "block";
+        if (!api.present) {
+          apiV.className = "verdict bad";
+          apiV.textContent = "✗ window.SafeExamBrowser tidak ada (bukan dari dalam SEB, atau SEB tanpa JS API).";
+        } else if (api.configKey) {
+          apiV.className = "verdict ok";
+          apiV.textContent = "✓ LULUS: JS API tersedia (versi " + (api.version || "?") + ") dan configKey terisi. Desain JS-API-only siap.";
+        } else if (api.hasSecurity) {
+          apiV.className = "verdict warn";
+          apiV.textContent = "⚠ SEB JS API ada tapi configKey kosong. Cek setting Config Key di .seb / versi SEB.";
+        } else {
+          apiV.className = "verdict warn";
+          apiV.textContent = "⚠ window.SafeExamBrowser ada tapi tanpa .security (versi SEB terlalu lama untuk JS API).";
+        }
+      } catch (e) {
+        apiV.style.display = "block";
+        apiV.className = "verdict bad";
+        apiV.textContent = "Error baca JS API: " + e.message;
+      }
+
+      // --- HTTP header ---
+      const hdrV = document.querySelector("#hdr-verdict");
+      try {
+        const data = await testHeader();
+        document.querySelector("#hdr").textContent = JSON.stringify(data.sebHeaders, null, 2);
+        const keys = Object.keys(data.sebHeaders || {});
+        const hasCK = keys.some(k => k.toLowerCase() === "x-safeexambrowser-configkeyhash");
+        hdrV.style.display = "block";
+        if (hasCK) {
+          hdrV.className = "verdict ok";
+          hdrV.textContent = "✓ Header ConfigKeyHash ikut pada fetch (SEB ini masih mengirim header).";
+        } else if (keys.length) {
+          hdrV.className = "verdict warn";
+          hdrV.textContent = "⚠ Ada header SEB tapi tanpa ConfigKeyHash.";
+        } else {
+          hdrV.className = "verdict warn";
+          hdrV.textContent = "— Tidak ada header SEB pada fetch (wajar untuk SEB 3.x WKWebView). Cukup andalkan JS API di atas.";
+        }
+      } catch (e) {
+        hdrV.style.display = "block";
+        hdrV.className = "verdict bad";
+        hdrV.textContent = "Error /sebEcho: " + e.message;
+      }
+    });
+  </script>
+</body>
+</html>
