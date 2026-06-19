@@ -36,6 +36,13 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
       window.SimpleUjianBrowser = { version: "PlaywrightMock" };
     });
 
+    // 2b. Pasang fake clock supaya nanti bisa "memajukan" waktu ujian.
+    // Guard baru mengunci tombol Selesai selama sisa waktu > 15 menit, jadi
+    // test perlu melompati waktu agar bisa menguji alur submit. resume() segera
+    // dipanggil agar waktu tetap mengalir normal (login Firebase tidak macet).
+    await page.clock.install();
+    await page.clock.resume();
+
     // 3. Log in as a student
     await page.goto('/');
     
@@ -85,8 +92,25 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
     const isOnlineInitially = await page.evaluate(() => navigator.onLine);
     expect(isOnlineInitially).toBe(false);
 
-    // Click submit button in action bar
+    // Guard "tidak boleh submit jika sisa waktu > 15 menit": majukan waktu
+    // sampai sisa ~10 menit (di bawah ambang 15 menit, tapi > 0 agar tidak
+    // memicu auto-submit waktu habis), lalu pastikan tombol Selesai aktif.
     const submitBtn = page.locator('#submit-btn');
+    await expect(submitBtn).toBeDisabled();
+
+    const remainingSeconds = await page.evaluate(() => {
+      const text = document.querySelector('#exam-timer')?.textContent?.trim() || '';
+      const parts = text.split(':').map(Number);
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      return 0;
+    });
+    if (remainingSeconds > 10 * 60) {
+      await page.clock.fastForward((remainingSeconds - 10 * 60) * 1000);
+    }
+    await expect(submitBtn).toBeEnabled();
+
+    // Click submit button in action bar
     await submitBtn.click();
 
     // Confirm Modal should appear
