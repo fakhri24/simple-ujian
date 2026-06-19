@@ -30,8 +30,10 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
         },
         configurable: true
       });
-      // Mock SafeExamBrowser to bypass login/rbac check during E2E tests
-      window.SafeExamBrowser = { version: "PlaywrightMock" };
+      // Bypass lockdown gate during E2E: Playwright "Desktop Chrome" pakai UA
+      // Windows, jadi expectedLockdown()=SUB. Mock marker SUB agar konsisten
+      // dengan platform (lihat js/lockdown.js). Marker SEB tak cocok di sini.
+      window.SimpleUjianBrowser = { version: "PlaywrightMock" };
     });
 
     // 3. Log in as a student

@@ -17,23 +17,10 @@
           <p style="color: var(--muted); margin: 0.5rem 0 0 0;">Memeriksa keamanan browser...</p>
         </div>
 
-        <!-- SEB Warning & Download Container (Hidden by default) -->
-        <div id="seb-warning-container" class="stack" style="display: none; text-align: center;">
-          <div style="font-size: 3.5rem; margin-bottom: 0.5rem;">🔒</div>
-          <h2 style="margin: 0; font-size: 1.4rem; color: var(--text);">Safe Exam Browser Diperlukan</h2>
-          <p style="color: var(--muted); font-size: 0.95rem; line-height: 1.6; margin: 0.75rem 0 1.5rem 0;">
-            Untuk menjaga integritas dan mencegah kecurangan, ujian ini hanya dapat diakses melalui <strong>Safe Exam Browser (SEB)</strong>. Silakan unduh konfigurasi di bawah ini untuk memulai.
-          </p>
-
-          <a href="/simple-ujian.seb" class="link-btn" download="simple-ujian.seb" style="width: 100%; margin-bottom: 1rem;">
-            Unduh Konfigurasi Ujian (.seb)
-          </a>
-
-          <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted);">
-            Belum memiliki aplikasi SEB? <br>
-            <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noopener" style="color: var(--brand); text-decoration: none; font-weight: 600;">Unduh Aplikasi Resmi SEB</a>
-          </div>
-        </div>
+        <!-- Lockdown Warning & Download Container (Hidden by default)
+             Diisi per-platform (SEB/SUB) oleh renderLockdownWarning() di
+             js/pages/loginPage.js — lihat lockdownGuidance() di js/lockdown.js. -->
+        <div id="seb-warning-container" class="stack" style="display: none; text-align: center;"></div>
 
          <!-- Login Form Container (Hidden by default) -->
         <div id="login-container" style="display: none;">

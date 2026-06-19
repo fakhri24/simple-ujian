@@ -6,7 +6,13 @@ import {
 } from "../auth.js";
 import { roles } from "../app-config.js";
 
-import { Lockdown, activeLockdown, isLockdown, lockdownSatisfied } from "../lockdown.js";
+import {
+  Lockdown,
+  activeLockdown,
+  isLockdown,
+  lockdownSatisfied,
+  lockdownGuidance,
+} from "../lockdown.js";
 
 const feedbackEl = document.querySelector("#login-feedback");
 const loginForm = document.querySelector("#login-form");
@@ -71,6 +77,37 @@ const checkSessionErrors = () => {
   }
 };
 
+// Render isi #seb-warning-container sesuai platform (SEB/SUB) saat gate tak
+// terpenuhi. Lihat lockdownGuidance() di js/lockdown.js.
+const renderLockdownWarning = (container) => {
+  const g = lockdownGuidance();
+
+  const actionsHtml = g.actions
+    .map((a) => {
+      const downloadAttr = a.download ? ` download="${a.download}"` : "";
+      if (a.disabled) {
+        return `<span class="link-btn" aria-disabled="true" style="width: 100%; margin-bottom: 1rem; opacity: 0.5; cursor: not-allowed; pointer-events: none;">${a.label} — segera hadir</span>`;
+      }
+      return `<a href="${a.href}"${downloadAttr} class="link-btn" style="width: 100%; margin-bottom: 1rem;">${a.label}</a>`;
+    })
+    .join("");
+
+  const hintHtml = g.hint
+    ? `<div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted);">
+        ${g.hint.text} <br>
+        <a href="${g.hint.href}" target="_blank" rel="noopener" style="color: var(--brand); text-decoration: none; font-weight: 600;">${g.hint.linkLabel}</a>
+      </div>`
+    : "";
+
+  container.innerHTML = `
+    <div style="font-size: 3.5rem; margin-bottom: 0.5rem;">🔒</div>
+    <h2 style="margin: 0; font-size: 1.4rem; color: var(--text);">${g.title}</h2>
+    <p style="color: var(--muted); font-size: 0.95rem; line-height: 1.6; margin: 0.75rem 0 1.5rem 0;">${g.description}</p>
+    ${actionsHtml}
+    ${hintHtml}
+  `;
+};
+
 // Initialize page based on lockdown browser presence/policy
 const init = () => {
   const loadingEl = document.querySelector("#seb-loading");
@@ -108,7 +145,10 @@ const init = () => {
     ensureAlreadyLoggedIn();
   } else {
     // Policy aktif & platform mewajibkan lockdown browser, tapi tidak terpenuhi:
-    if (warningEl) warningEl.style.display = "flex";
+    if (warningEl) {
+      renderLockdownWarning(warningEl);
+      warningEl.style.display = "flex";
+    }
     if (loginContainerEl) loginContainerEl.style.display = "none";
   }
 };
