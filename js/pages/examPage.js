@@ -14,6 +14,8 @@ import {
   getExamAttempt,
   updateExamAttemptAnswers,
   getExamKeys,
+  computeServerOffsetMs,
+  fetchServerExamTime,
 } from "../db.js";
 import { renderQuestion } from "../questionRenderer.js";
 import { calculateScore } from "../scoring.js";
@@ -606,8 +608,28 @@ const bootstrap = async () => {
 
     let engine = null;
 
-    const startExamEngine = (sessionAttemptData) => {
-      currentEndTime = sessionAttemptData.endTime;
+    const startExamEngine = async (sessionAttemptData) => {
+      // Pendekatan A: minta waktu ujian otoritatif dari server. endTime dihitung
+      // ulang dari durasi ujian TERKINI (memperbaiki bug durasi yang diubah
+      // setelah attempt dibuat) dan serverNow memberi offset jam yang akurat.
+      const serverTime = await fetchServerExamTime(exam.id);
+
+      // Offset jam: utamakan serverNow segar dari function; jika gagal, fallback
+      // ke offset yang diukur saat attempt dibuat (pendekatan B).
+      const serverOffsetMs =
+        serverTime && typeof serverTime.serverNow === "number"
+          ? serverTime.serverNow - Date.now()
+          : computeServerOffsetMs(sessionAttemptData);
+
+      // endTime otoritatif dari server; jika gagal, fallback ke nilai tersimpan.
+      currentEndTime =
+        serverTime && typeof serverTime.endTime === "number"
+          ? serverTime.endTime
+          : sessionAttemptData.endTime;
+
+      // Clamp sisa waktu ke durasi resmi + waktu tambahan guru.
+      const extraMinutes = Number(sessionAttemptData.extraMinutes || 0);
+      const maxRemainingSeconds = (Number(exam.durationMinutes || 30) + extraMinutes) * 60;
 
       engine = createExamEngine({
         exam,
@@ -615,6 +637,8 @@ const bootstrap = async () => {
         userId,
         initialAnswers: sessionAttemptData.answersByQuestionId,
         endTimeOverride: currentEndTime,
+        serverOffsetMs,
+        maxRemainingSeconds,
         onTimerTick: (seconds) => {
           timerEl.textContent = formatTime(seconds);
           if (submitBtn && !hasSubmitted) {
@@ -725,7 +749,9 @@ const bootstrap = async () => {
           const addedMinutes = Math.round(diffMs / 60000);
           
           currentEndTime = updatedAttempt.endTime;
-          engine.updateEndTime(updatedAttempt.endTime);
+          const newExtraMinutes = Number(updatedAttempt.extraMinutes || 0);
+          const newMaxRemainingSeconds = (Number(exam.durationMinutes || 30) + newExtraMinutes) * 60;
+          engine.updateEndTime(updatedAttempt.endTime, newMaxRemainingSeconds);
 
           if (addedMinutes > 0) {
             showToastNotification(`Guru memberikan tambahan waktu kompensasi +${addedMinutes} menit!`);
@@ -776,7 +802,7 @@ const bootstrap = async () => {
       
       startOverlay.classList.add("hidden");
       startAntiCheatMonitoring();
-      startExamEngine(attemptData);
+      await startExamEngine(attemptData);
     });
 
     document.querySelector("#resume-fs-btn").addEventListener("click", async () => {

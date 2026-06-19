@@ -13,6 +13,8 @@ export const createExamEngine = ({
   userId,
   initialAnswers,
   endTimeOverride,
+  serverOffsetMs = 0,
+  maxRemainingSeconds = 0,
   onTimerTick,
   onTimeUp,
 }) => {
@@ -38,10 +40,22 @@ export const createExamEngine = ({
     ...(savedAttempt.answersByQuestionId || {})
   };
 
+  // Batas atas sisa waktu (clamp): durasi resmi + waktu tambahan guru.
+  // Jaring pengaman agar timer tak pernah melebihi durasi walau jam perangkat ngaco.
+  let capSeconds = Number(maxRemainingSeconds) > 0 ? Number(maxRemainingSeconds) : 0;
+
+  // Sisa waktu = endTime - (jam perangkat dikoreksi offset server), lalu di-clamp.
+  const computeRemaining = () => {
+    const correctedNow = Date.now() + serverOffsetMs;
+    let rem = Math.max(0, Math.round((savedEndTime - correctedNow) / 1000));
+    if (capSeconds > 0) rem = Math.min(rem, capSeconds);
+    return rem;
+  };
+
   const state = {
     currentIndex: Number(savedAttempt.currentIndex || 0),
     answersByQuestionId: mergedAnswers,
-    remainingSeconds: Math.max(0, Math.round((savedEndTime - Date.now()) / 1000)),
+    remainingSeconds: computeRemaining(),
     flaggedQuestions: new Set(savedAttempt.flaggedQuestions || []),
   };
 
@@ -58,7 +72,7 @@ export const createExamEngine = ({
   };
 
   const timerRef = setInterval(() => {
-    state.remainingSeconds = Math.max(0, Math.round((savedEndTime - Date.now()) / 1000));
+    state.remainingSeconds = computeRemaining();
 
     persist();
     onTimerTick(state.remainingSeconds);
@@ -150,10 +164,14 @@ export const createExamEngine = ({
       localStorage.removeItem(timerKey);
       localStorage.removeItem(endTimeKey);
     },
-    updateEndTime(newEndTime) {
+    updateEndTime(newEndTime, newMaxRemainingSeconds) {
       savedEndTime = newEndTime;
       localStorage.setItem(endTimeKey, String(savedEndTime));
-      state.remainingSeconds = Math.max(0, Math.round((savedEndTime - Date.now()) / 1000));
+      // Saat guru menambah waktu, naikkan juga batas clamp agar tidak memotong tambahan.
+      if (typeof newMaxRemainingSeconds === "number" && newMaxRemainingSeconds > 0) {
+        capSeconds = newMaxRemainingSeconds;
+      }
+      state.remainingSeconds = computeRemaining();
       onTimerTick(state.remainingSeconds);
       persist();
     },
