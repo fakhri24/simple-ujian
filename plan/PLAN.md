@@ -381,21 +381,39 @@ await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
 
 Auto-quit saat logout SUDAH ditangani `OnNavigationStarting` + `exitUrl` yang ada.
 
-## Tahap L2 — Generalisasi clearance & enforcement (NANTI, sentuh backend + DB)
+L2 dipecah dua karena **atestasi SUB ditunda** (keputusan: refactor dulu).
+Insight: sampai atestasi SUB ada, "requireLockdown" praktis = "requireSEB"
+(cuma SEB yang bisa lolos) → rename field & clearance SUB pas dilakukan bareng
+L2b, bukan dipotong setengah.
 
-1. [ ] Generikkan field per-ujian `requireSEB` → `requireLockdown` (migrasi /
-       baca dua-duanya saat transisi); label admin jadi "Wajib browser ujian".
-2. [ ] `ensureLockdownClearance(examId, exam)` sebagai **router**:
+### Tahap L2a — Generalisasi gate akses  [SELESAI]
+
+Lapisan **akses** (bukan clearance per-ujian) jadi lockdown-neutral & multi-platform.
+Aman/dormant karena `lockdownPolicyOn=false` → tanpa perubahan perilaku.
+
+1. [x] `rbac.js`: gate siswa `enforceSEB`/`isSEB` → `lockdownSatisfied()`.
+2. [x] `loginPage.js`: tampil/sembunyi login & banner pakai `lockdownSatisfied()`
+       / `isLockdown` (bukan `enforceSEB`/`isSEB`).
+3. [x] `seb-utils.js`: `enforceSEB` ditandai `@deprecated` (digantikan
+       `lockdownPolicyOn`); `isSEB` dipertahankan sebagai primitive khas SEB.
+4. [ ] (Saat `lockdownPolicyOn` diaktifkan) buat teks `#seb-warning-container`
+       per-platform via `expectedLockdown()` (SEB vs SUB). TODO di `loginPage.js`.
+
+### Tahap L2b — Clearance per-ujian + atestasi SUB  [NANTI, sentuh backend + DB]
+
+Saling bergantung & sensitif-keamanan → dikerjakan sebagai satu paket.
+
+1. [ ] `ensureLockdownClearance(examId, exam)` sebagai **router**:
        - `activeLockdown === SEB` → `ensureSEBClearance` (alur config-key sekarang).
        - `activeLockdown === SUB` → `ensureSUBClearance` (atestasi SUB, baru).
-       - lainnya → tolak.
-3. [ ] Rancang **atestasi SUB**: host C# kirim token bertanda-tangan (mis. via
-       `postMessage` / header) yang diverifikasi Cloud Function — analog peran
-       config key SEB, tapi mekanisme milik SUB.
-4. [ ] `rbac.js` & `loginPage.js`: ganti gate `enforceSEB`/`isSEB` →
-       `lockdownSatisfied()` / `isLockdown` agar SUB diakui setara SEB.
-5. [ ] Firestore rules: generikkan `examRequiresSEB` → `examRequiresLockdown`;
-       clearance berlaku untuk SEB maupun SUB.
+       - lainnya → tolak. Panggil ini dari `examPage.js` (ganti `ensureSEBClearance`).
+2. [ ] Rancang **atestasi SUB**: host C# kirim token bertanda-tangan yang
+       diverifikasi Cloud Function — analog peran config key SEB, tapi mekanisme
+       milik SUB. Plafon jaminan = deterrence (kunci bisa diekstrak dari .exe).
+3. [ ] Generikkan field per-ujian `requireSEB` → `requireLockdown` (baca
+       dua-duanya saat transisi); label admin "Wajib browser ujian".
+4. [ ] Firestore rules: `examRequiresSEB` → `examRequiresLockdown`; clearance
+       berlaku untuk SEB maupun SUB.
 
 ## Catatan koeksistensi dengan Rencana I
 
@@ -406,8 +424,10 @@ Auto-quit saat logout SUDAH ditangani `OnNavigationStarting` + `exitUrl` yang ad
 - Cleanup Fase 4 Rencana I (hapus `seb-check.html`, `sebEcho`, dll.) tetap berlaku
   dan independen dari Rencana II.
 
-## Pertanyaan terbuka (perlu keputusan saat mulai)
+## Keputusan terkunci (Rencana II)
 
-- Sisi host C# WebView2: setuju tombol exit memanggil
-  `window.chrome.webview.postMessage("quit")` (web menyiapkan pemanggilannya,
-  C# menangani penutupan app)? Ini menentukan implementasi langkah L1.3 & L1.4.
+- **Exit SUB pakai mekanisme `exitUrl` yang sudah ada** (navigasi → auto-quit),
+  BUKAN `postMessage("quit")`. → L1 SELESAI & terverifikasi di Windows.
+- **Nama `exit-seb.html` dipertahankan** (rename memicu perubahan Config Key SEB
+  → regenerasi `.seb` + update secret). Ditunda sampai memang regenerasi `.seb`.
+- **Atestasi SUB ditunda** ke L2b; L2a hanya generalisasi gate akses.

@@ -29,7 +29,7 @@ export const isWindows = () => {
 // Check if running on Android
 export const isAndroid = () => navigator.userAgent.toLowerCase().includes("android");
 
-// Check if the current browser environment enforces SEB (macOS and iPad)
-// TEMPORARILY DISABLED for testing — re-enable before production
-// export const enforceSEB = isMacOSOrIPad();
+// @deprecated — digantikan oleh lockdownPolicyOn + lockdownSatisfied() di
+// js/lockdown.js (yang multi-platform: SEB/SUB/...). Tidak lagi dipakai gate
+// akses sejak Tahap L2a. Dibiarkan agar tak memutus impor lama yang tersisa.
 export const enforceSEB = false;
