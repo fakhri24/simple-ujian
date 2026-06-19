@@ -1,8 +1,6 @@
 /**
  * Cloud Functions — SEB config key validation (JS-API-only).
  *
- * - `sebEcho`     : diagnostik Fase 0 (echo header request). Dipakai oleh
- *                   public/pages/seb-check.html.
  * - `validateSEB` : Fase 2. Gerbang "Mulai Ujian". Memverifikasi Config Key
  *                   yang dibaca client dari SEB JavaScript API
  *                   (SafeExamBrowser.security.configKey), lalu menerbitkan
@@ -47,21 +45,6 @@ async function getUid(req) {
     return null;
   }
 }
-
-// ---- Diagnostik Fase 0: echo header (dipakai seb-check.html) ----
-exports.sebEcho = onRequest({ region: "us-central1", cors: true }, (req, res) => {
-  const sebHeaders = {};
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (key.toLowerCase().startsWith("x-safeexambrowser")) sebHeaders[key] = value;
-  }
-  res.json({
-    ok: true,
-    receivedAt: new Date().toISOString(),
-    method: req.method,
-    userAgent: req.headers["user-agent"] || null,
-    sebHeaders,
-  });
-});
 
 // ---- Fase 2: validateSEB (challenge + verify) ----
 exports.validateSEB = onRequest(

@@ -14,10 +14,6 @@
     ],
     "rewrites": [
       {
-        "source": "/sebEcho",
-        "function": "sebEcho"
-      },
-      {
         "source": "/validateSEB",
         "function": "validateSEB"
       }

@@ -120,6 +120,7 @@ const showFatalError = (title, message) => {
     if (prevBtn) prevBtn.style.display = "none";
     if (nextBtn) nextBtn.style.display = "none";
     if (submitBtn) submitBtn.style.display = "none";
+    if (flagBtn) flagBtn.style.display = "none";
   } catch (err) {
     console.error("Kesalahan saat merender fatal error:", err);
   } finally {

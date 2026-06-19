@@ -206,18 +206,22 @@ Keputusan: enforcement **per-ujian** lewat flag `requireSEB` (bukan global).
 
 ## Fase 4 — Uji end-to-end & cleanup
 
-1. [ ] Uji E2E alur ujian nyata:
+1. [x] Uji E2E alur ujian nyata (dijalankan manual, LULUS):
    - Admin: buat/edit ujian → "Wajib Safe Exam Browser" = Ya.
    - Siswa di SEB modern WebView (macOS & iPad): buka ujian → tervalidasi
      (reload nonce) → bisa "Mulai" & kerjakan normal.
    - Siswa TANPA SEB / config dimanipulasi: diblokir saat buka ujian.
    - Ujian `requireSEB=false`: tetap jalan tanpa SEB (regression).
-2. [ ] (Opsional) `js/seb-utils.js`: `enforceSEB = isMacOSOrIPad()` untuk gate
-   login lemah (UX). Catatan: enforcement kuat sudah ditangani per-ujian via
-   `requireSEB`, jadi ini hanya pelengkap UX.
-3. [ ] Cleanup setelah lolos: hapus link `<!-- TEMP-SEB-DIAG -->` di
-   `index.html`, halaman `public/pages/seb-check.html`, Function `sebEcho` +
-   rewrite-nya, dan doc diagnostik `exam_clearance/{uid}___seb_diag__`.
+2. [~] (Opsional) `enforceSEB = isMacOSOrIPad()` untuk gate login lemah —
+   **DISUBSUMSI Rencana II**: gate akses kini lewat `lockdownSatisfied()` /
+   `lockdownPolicyOn` (L2a). `enforceSEB` sudah `@deprecated`. Tidak dikerjakan.
+3. [x] Cleanup setelah lolos:
+   - [x] Hapus link `<!-- TEMP-SEB-DIAG -->` di `index.html`.
+   - [x] Hapus halaman `public/pages/seb-check.html` (+ `dist/`).
+   - [x] Hapus Function `sebEcho` (`functions/index.js`) + rewrite `firebase.json`.
+   - [ ] Hapus doc diagnostik `exam_clearance/{uid}___seb_diag__` — MANUAL
+         (butuh uid; tak ada ADC lokal). Lalu `firebase deploy` agar `sebEcho`
+         benar-benar hilang dari produksi.
 
 ---
 
