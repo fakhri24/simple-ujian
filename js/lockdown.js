@@ -91,7 +91,10 @@ export const lockdownDownloads = Object.freeze({
   sebConfigHttpsUrl: "simple-ujian.web.app/simple-ujian.seb", // tanpa skema, utk sebs://
   sebAppMac: "https://safeexambrowser.org/download_en.html",
   sebAppIos: "https://apps.apple.com/app/safe-exam-browser/id1497837538",
-  subWindowsExe: "", // TODO: isi link unduh .exe (mis. Google Drive) Simple Ujian Browser
+  // Simple Ujian Browser .exe (Google Drive). Pakai host usercontent + confirm=t
+  // agar langsung mengunduh tanpa halaman "Virus scan warning" untuk file .exe.
+  subWindowsExe:
+    "https://drive.usercontent.google.com/download?id=1IkUv_anUNBgSXGFWrMb7S4W6ruGdSJ8X&export=download&confirm=t",
   subAndroidApk: "", // TODO: belum tersedia
 });
 
