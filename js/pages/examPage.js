@@ -17,6 +17,7 @@ import {
 } from "../db.js";
 import { renderQuestion } from "../questionRenderer.js";
 import { calculateScore } from "../scoring.js";
+import { ensureSEBClearance } from "../seb-validate.js";
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -119,6 +120,7 @@ const showFatalError = (title, message) => {
     if (prevBtn) prevBtn.style.display = "none";
     if (nextBtn) nextBtn.style.display = "none";
     if (submitBtn) submitBtn.style.display = "none";
+    if (flagBtn) flagBtn.style.display = "none";
   } catch (err) {
     console.error("Kesalahan saat merender fatal error:", err);
   } finally {
@@ -385,6 +387,18 @@ const bootstrap = async () => {
         showFatalError("Akses Ujian Ditutup", "Batas akhir waktu pengerjaan untuk mulai masuk ujian ini telah berakhir.");
         return;
       }
+
+      // Gerbang Config Key SEB: hanya untuk skenario mulai-baru (bukan resume).
+      // Untuk ujian yang requireSEB, ini me-reload sekali (menaruh nonce di URL)
+      // lalu memverifikasi config; tiket exam_clearance dibutuhkan oleh rules
+      // saat membuat exam_attempts.
+      feedbackEl.textContent = "Memeriksa keamanan Safe Exam Browser...";
+      const clearance = await ensureSEBClearance(examId, exam);
+      if (!clearance.ok) {
+        showFatalError("Konfigurasi SEB Tidak Sah", clearance.reason || "Tidak dapat memverifikasi Safe Exam Browser.");
+        return;
+      }
+      feedbackEl.textContent = "";
     }
 
     let attemptData = hasOngoingAttempt ? attempt : null;

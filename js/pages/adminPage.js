@@ -549,6 +549,7 @@ document
         allowMultipleAttempts: data.get("allowMultipleAttempts") === "true",
         showResultsImmediately: data.get("showResultsImmediately") === "true",
         randomizeQuestions: data.get("randomizeQuestions") === "true",
+        requireSEB: data.get("requireSEB") === "true",
         active: data.get("active") === "true",
         questionIds: [],
         visibility,
@@ -856,11 +857,13 @@ const openEditExamModal = (exam) => {
   const allowMultipleAttempts = exam.allowMultipleAttempts ?? true;
   const showResultsImmediately = exam.showResultsImmediately ?? true;
   const randomizeQuestions = exam.randomizeQuestions ?? false;
-  
+  const requireSEB = exam.requireSEB ?? false;
+
   const attemptsEl = document.querySelector("#edit-exam-attempts-policy");
   const resultsEl = document.querySelector("#edit-exam-results-policy");
   const randomizeQuestionsEl = document.querySelector("#edit-exam-randomize-questions");
-  
+  const requireSEBEl = document.querySelector("#edit-exam-require-seb");
+
   if (attemptsEl) {
     attemptsEl.value = String(allowMultipleAttempts);
     attemptsEl.dispatchEvent(new Event("change"));
@@ -872,6 +875,9 @@ const openEditExamModal = (exam) => {
   if (randomizeQuestionsEl) {
     randomizeQuestionsEl.value = String(randomizeQuestions);
     randomizeQuestionsEl.dispatchEvent(new Event("change"));
+  }
+  if (requireSEBEl) {
+    requireSEBEl.value = String(requireSEB);
   }
 
   const visibility = exam.visibility || "public";
@@ -924,6 +930,7 @@ editExamForm?.addEventListener("submit", async (e) => {
   const allowMultipleAttempts = document.querySelector("#edit-exam-attempts-policy")?.value === "true";
   const showResultsImmediately = document.querySelector("#edit-exam-results-policy")?.value === "true";
   const randomizeQuestions = document.querySelector("#edit-exam-randomize-questions")?.value === "true";
+  const requireSEB = document.querySelector("#edit-exam-require-seb")?.value === "true";
   const active = document.querySelector("#edit-exam-active")?.value === "true";
   const visibility = document.querySelector("#edit-exam-visibility")?.value || "public";
   const assignedTo = visibility === "private" ? (editStudentPickerInstance ? editStudentPickerInstance.getSelectedUids() : []) : [];
@@ -951,6 +958,7 @@ editExamForm?.addEventListener("submit", async (e) => {
       allowMultipleAttempts,
       showResultsImmediately,
       randomizeQuestions,
+      requireSEB,
       active,
       visibility,
       assignedTo

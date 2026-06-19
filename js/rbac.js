@@ -1,15 +1,15 @@
 import { getCurrentUser, resolveUserRole, waitForAuthReady } from "./auth.js";
 import { verifyAndStartSession, handleAutomaticLogout } from "./session.js";
-import { isSEB, enforceSEB } from "./seb-utils.js";
+import { lockdownSatisfied } from "./lockdown.js";
 
 export const requireRole = async (role, redirectPath = "/") => {
-  // Check if running inside Safe Exam Browser for student role
+  // Gate lockdown browser untuk siswa: pastikan dibuka di browser ujian yang
+  // sesuai platform (SEB di macOS/iPad, SUB di Windows, dst). Dormant selama
+  // lockdownPolicyOn=false. Lihat js/lockdown.js.
   if (role === "siswa") {
-    if (enforceSEB) {
-      if (!isSEB) {
-        window.location.replace(redirectPath);
-        return null;
-      }
+    if (!lockdownSatisfied()) {
+      window.location.replace(redirectPath);
+      return null;
     }
   }
 

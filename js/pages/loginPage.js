@@ -6,7 +6,7 @@ import {
 } from "../auth.js";
 import { roles } from "../app-config.js";
 
-import { isSEB, enforceSEB } from "../seb-utils.js";
+import { Lockdown, activeLockdown, isLockdown, lockdownSatisfied } from "../lockdown.js";
 
 const feedbackEl = document.querySelector("#login-feedback");
 const loginForm = document.querySelector("#login-form");
@@ -71,7 +71,7 @@ const checkSessionErrors = () => {
   }
 };
 
-// Initialize page based on SEB presence
+// Initialize page based on lockdown browser presence/policy
 const init = () => {
   const loadingEl = document.querySelector("#seb-loading");
   const warningEl = document.querySelector("#seb-warning-container");
@@ -82,20 +82,32 @@ const init = () => {
     loadingEl.style.display = "none";
   }
 
-  // If SEB is not enforced (e.g. Windows), or if enforced and user is running SEB:
-  if (!enforceSEB || isSEB) {
+  // Lockdown terpenuhi: policy mati, ATAU dibuka di browser ujian yang sesuai
+  // platform (SEB di macOS/iPad, SUB di Windows). Lihat js/lockdown.js.
+  // Catatan: saat lockdownPolicyOn diaktifkan, teks #seb-warning-container
+  // sebaiknya dibuat per-platform (SEB vs SUB) lewat expectedLockdown().
+  if (lockdownSatisfied()) {
     if (warningEl) warningEl.style.display = "none";
     if (loginContainerEl) loginContainerEl.style.display = "block";
-    
-    // Hide active banner if they are not actually running SEB (e.g. Windows Chrome)
-    if (activeBannerEl && !isSEB) {
-      activeBannerEl.style.display = "none";
+
+    // Banner "browser ujian aktif": tampil dgn label sesuai lockdown browser
+    // (SEB / SUB); sembunyikan di browser biasa.
+    if (activeBannerEl) {
+      if (isLockdown) {
+        const name =
+          activeLockdown === Lockdown.SEB
+            ? "Safe Exam Browser"
+            : "Simple Ujian Browser";
+        activeBannerEl.textContent = `✓ ${name} Aktif & Aman`;
+      } else {
+        activeBannerEl.style.display = "none";
+      }
     }
-    
+
     checkSessionErrors();
     ensureAlreadyLoggedIn();
   } else {
-    // If SEB is enforced (macOS/iPad) but not running inside SEB:
+    // Policy aktif & platform mewajibkan lockdown browser, tapi tidak terpenuhi:
     if (warningEl) warningEl.style.display = "flex";
     if (loginContainerEl) loginContainerEl.style.display = "none";
   }

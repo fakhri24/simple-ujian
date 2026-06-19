@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "examUrl": "https://simple-ujian.web.app/",
+  "exitUrl": "https://simple-ujian.web.app/pages/exit-seb.html",
+  "adminPassword": {
+    "algo": "PBKDF2-SHA256",
+    "iterations": 100000,
+    "salt": "jKB11GAU1AH3/UEFpkfULg==",
+    "hash": "2W6DPuNghc4IMnvyDeY4oYqpoJXe4hc+lLD7PHILS+I="
+  }
+}

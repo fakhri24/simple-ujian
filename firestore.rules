@@ -20,6 +20,18 @@ service cloud.firestore {
       return 5 * 60 * 1000;
     }
 
+    // Tiket izin SEB (exam_clearance) ditulis HANYA oleh Cloud Function
+    // validateSEB (Admin SDK) setelah Config Key terverifikasi. Berlaku singkat.
+    function hasClearance(examId) {
+      return exists(/databases/$(database)/documents/exam_clearance/$(request.auth.uid + '_' + examId))
+        && get(/databases/$(database)/documents/exam_clearance/$(request.auth.uid + '_' + examId)).data.expiresAt > request.time.toMillis();
+    }
+
+    // Ujian menuntut SEB hanya jika flag requireSEB == true (default: tidak).
+    function examRequiresSEB(exam) {
+      return exam.get('requireSEB', false) == true;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAdmin() || (
@@ -130,7 +142,9 @@ service cloud.firestore {
         attemptId == request.resource.data.examId + '_' + request.auth.uid &&
         examAccessible(examOf(request.resource.data.examId)) &&
         withinStartWindow(examOf(request.resource.data.examId)) &&
-        isFreshAttempt(examOf(request.resource.data.examId))
+        isFreshAttempt(examOf(request.resource.data.examId)) &&
+        // Jika ujian menuntut SEB, wajib ada tiket izin Config Key yang sah.
+        (!examRequiresSEB(examOf(request.resource.data.examId)) || hasClearance(request.resource.data.examId))
       );
 
       allow update: if isAdmin() || (
@@ -171,12 +185,25 @@ service cloud.firestore {
             examOf(resource.data.examId).get('allowMultipleAttempts', true) == true &&
             examAccessible(examOf(resource.data.examId)) &&
             withinStartWindow(examOf(resource.data.examId)) &&
-            isFreshAttempt(examOf(resource.data.examId))
+            isFreshAttempt(examOf(resource.data.examId)) &&
+            // Retake juga butuh tiket izin SEB jika ujian menuntut SEB.
+            (!examRequiresSEB(examOf(resource.data.examId)) || hasClearance(resource.data.examId))
           )
         )
       );
 
       allow delete: if isAdmin();
+    }
+
+    // Tiket izin SEB & nonce — DITULIS HANYA oleh Cloud Function (Admin SDK,
+    // melewati rules). Client tidak boleh menulis; baca dibatasi.
+    match /exam_clearance/{docId} {
+      allow read: if isAuthed() && (isAdmin() || resource.data.uid == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /seb_challenges/{nonce} {
+      allow read, write: if false;
     }
   }
 }
