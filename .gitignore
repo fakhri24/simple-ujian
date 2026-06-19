@@ -14,6 +14,10 @@ firebase/new_passwords.json
 # Ekspor pengguna Firebase Auth (berisi password hash + salt) — JANGAN commit
 users.json
 
+# Biner Simple Ujian Browser (~69MB) — disajikan dari hosting, jangan masuk git.
+# File harus ada di public/ saat build+deploy. Sumber: Google Drive (lihat catatan tim).
+public/SimpleUjianBrowser.exe
+
 # Tool / Agent files
 .agents/
 .claude/
