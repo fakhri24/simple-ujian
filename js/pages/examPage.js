@@ -48,6 +48,9 @@ let unsubscribeAttemptFn = null;
 let hasSubmitted = false;
 let isSystemPopupOpen = false;
 
+// Tombol "Selesai" baru aktif saat sisa waktu <= ambang ini (anti-submit terlalu dini).
+const MIN_REMAINING_TO_SUBMIT_SECONDS = 15 * 60;
+
 const hideGlobalLoading = () => {
   const globalLoading = document.querySelector("#global-loading-screen");
   if (globalLoading) {
@@ -614,6 +617,14 @@ const bootstrap = async () => {
         endTimeOverride: currentEndTime,
         onTimerTick: (seconds) => {
           timerEl.textContent = formatTime(seconds);
+          if (submitBtn && !hasSubmitted) {
+            const locked = seconds > MIN_REMAINING_TO_SUBMIT_SECONDS;
+            submitBtn.disabled = locked;
+            submitBtn.classList.toggle("is-locked", locked);
+            submitBtn.title = locked
+              ? "Tombol Selesai aktif saat sisa waktu ≤ 15 menit"
+              : "";
+          }
         },
         onTimeUp: async () => {
           if (hasSubmitted) {
@@ -880,6 +891,16 @@ const bootstrap = async () => {
 
     submitBtn.addEventListener("click", () => {
       if (!engine || hasSubmitted) return;
+
+      // Cegah submit terlalu dini: tetap blokir meski semua soal sudah dijawab.
+      if (engine.remainingSeconds > MIN_REMAINING_TO_SUBMIT_SECONDS) {
+        const menitLagi = Math.ceil(
+          (engine.remainingSeconds - MIN_REMAINING_TO_SUBMIT_SECONDS) / 60
+        );
+        feedbackEl.textContent =
+          `Belum bisa mengirim. Tombol Selesai aktif saat sisa waktu ≤ 15 menit (sekitar ${menitLagi} menit lagi).`;
+        return;
+      }
 
       const unanswered = engine.unansweredCount();
       const flaggedCount = engine.flaggedCount();
