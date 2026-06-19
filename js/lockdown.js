@@ -74,7 +74,10 @@ export function expectedLockdown() {
 }
 
 // Kill-switch global kebijakan lockdown (pengganti enforceSEB=false saat testing).
-export const lockdownPolicyOn = true;
+// Dimatikan sementara: ujian dijalankan tanpa SEB/SUB (siswa terbiasa tanpa
+// lockdown). Infra .exe/.seb tetap utuh — set true lagi bila guru ingin pakai
+// lockdown di tahun pelajaran berikutnya.
+export const lockdownPolicyOn = false;
 
 // Gate akses: apakah lingkungan ini boleh masuk?
 export function lockdownSatisfied() {
