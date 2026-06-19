@@ -6,7 +6,7 @@ import {
 } from "../auth.js";
 import { roles } from "../app-config.js";
 
-import { isLockdown, lockdownSatisfied } from "../lockdown.js";
+import { Lockdown, activeLockdown, isLockdown, lockdownSatisfied } from "../lockdown.js";
 
 const feedbackEl = document.querySelector("#login-feedback");
 const loginForm = document.querySelector("#login-form");
@@ -90,10 +90,18 @@ const init = () => {
     if (warningEl) warningEl.style.display = "none";
     if (loginContainerEl) loginContainerEl.style.display = "block";
 
-    // Sembunyikan banner "browser ujian aktif" jika bukan di lockdown browser
-    // (mis. Chrome biasa saat policy mati).
-    if (activeBannerEl && !isLockdown) {
-      activeBannerEl.style.display = "none";
+    // Banner "browser ujian aktif": tampil dgn label sesuai lockdown browser
+    // (SEB / SUB); sembunyikan di browser biasa.
+    if (activeBannerEl) {
+      if (isLockdown) {
+        const name =
+          activeLockdown === Lockdown.SEB
+            ? "Safe Exam Browser"
+            : "Simple Ujian Browser";
+        activeBannerEl.textContent = `✓ ${name} Aktif & Aman`;
+      } else {
+        activeBannerEl.style.display = "none";
+      }
     }
 
     checkSessionErrors();
