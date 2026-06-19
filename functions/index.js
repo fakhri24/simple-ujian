@@ -142,3 +142,73 @@ exports.validateSEB = onRequest(
     }
   }
 );
+
+// ---- Waktu ujian otoritatif (server) ----
+// Mengembalikan endTime yang dihitung dari waktu mulai server (startedAtServer)
+// + durasi ujian TERKINI + waktu tambahan guru. Ini menutup bug "durasi diubah
+// setelah attempt dibuat" (endTime lama tidak ikut menyesuaikan) dan memberi
+// `serverNow` untuk koreksi jam perangkat siswa. Ditulis balik via Admin SDK
+// (melewati rules) agar rules & monitoring guru memakai endTime yang sama.
+exports.examTime = onRequest(
+  { region: "us-central1", cors: true },
+  async (req, res) => {
+    try {
+      const uid = await getUid(req);
+      if (!uid) {
+        res.status(401).json({ ok: false, error: "unauthenticated" });
+        return;
+      }
+      const examId = String(req.query.examId || (req.body || {}).examId || "");
+      if (!examId) {
+        res.status(400).json({ ok: false, error: "examId_required" });
+        return;
+      }
+
+      const attemptRef = db.collection("exam_attempts").doc(`${examId}_${uid}`);
+      const [attemptSnap, examSnap] = await Promise.all([
+        attemptRef.get(),
+        db.collection("exams").doc(examId).get(),
+      ]);
+      if (!attemptSnap.exists) {
+        res.status(404).json({ ok: false, error: "attempt_not_found" });
+        return;
+      }
+      if (!examSnap.exists) {
+        res.status(404).json({ ok: false, error: "exam_not_found" });
+        return;
+      }
+
+      const attempt = attemptSnap.data();
+      const exam = examSnap.data();
+      const serverNow = Date.now();
+
+      // Hanya kelola pengerjaan yang sedang berlangsung.
+      if (attempt.status !== "ongoing") {
+        res.json({ ok: true, serverNow, endTime: attempt.endTime || null, status: attempt.status });
+        return;
+      }
+
+      // Waktu mulai otoritatif: stempel server → fallback startedAt klien → now.
+      let startMs =
+        attempt.startedAtServer && typeof attempt.startedAtServer.toMillis === "function"
+          ? attempt.startedAtServer.toMillis()
+          : null;
+      if (!startMs && attempt.startedAt) startMs = Date.parse(attempt.startedAt);
+      if (!startMs) startMs = serverNow;
+
+      const durationMin = Number(exam.durationMinutes || 30);
+      const extraMin = Number(attempt.extraMinutes || 0);
+      const endTime = startMs + (durationMin + extraMin) * 60 * 1000;
+
+      // Tulis balik hanya jika berbeda, agar rules & monitoring konsisten.
+      if (attempt.endTime !== endTime) {
+        await attemptRef.update({ endTime });
+      }
+
+      res.json({ ok: true, serverNow, endTime, status: "ongoing" });
+    } catch (e) {
+      logger.error("examTime error", e);
+      res.status(500).json({ ok: false, error: "internal" });
+    }
+  }
+);

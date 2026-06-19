@@ -15,8 +15,9 @@ import {
   increment,
   documentId,
   or,
+  serverTimestamp,
 } from "firebase/firestore";
-import { db, storage } from "./firebase-config.js";
+import { db, storage, auth } from "./firebase-config.js";
 import { ref, deleteObject } from "firebase/storage";
 
 const usersCol = collection(db, "users");
@@ -341,13 +342,17 @@ export const initializeExamAttempt = async (examId, userId, email, durationMinut
     }
 
     const durationSeconds = durationMinutes * 60;
+    const startedAt = new Date().toISOString();
     const endTime = Date.now() + durationSeconds * 1000;
 
     const data = {
       examId,
       userId,
       email,
-      startedAt: new Date().toISOString(),
+      startedAt,
+      // Stempel waktu server (otoritatif) untuk mengoreksi jam perangkat siswa
+      // yang mungkin maju/mundur. Lihat computeServerOffsetMs().
+      startedAtServer: serverTimestamp(),
       endTime,
       extraMinutes: 0,
       status: "ongoing",
@@ -360,9 +365,47 @@ export const initializeExamAttempt = async (examId, userId, email, durationMinut
     }
 
     await setDoc(attemptRef, data);
-    return data;
+    // Baca ulang agar startedAtServer ter-resolve dari sentinel ke nilai waktu server
+    const fresh = await getDoc(attemptRef);
+    return fresh.exists() ? fresh.data() : data;
   } catch (error) {
     throw new Error(`Gagal menginisialisasi pengerjaan ujian: ${error.message}`);
+  }
+};
+
+// Ambil waktu ujian otoritatif dari Cloud Function examTime:
+// endTime dihitung server berdasarkan durasi ujian TERKINI (menutup bug durasi
+// yang diubah setelah attempt dibuat) + serverNow untuk koreksi jam perangkat.
+// Mengembalikan { serverNow, endTime, status } atau null bila gagal (fallback ke
+// nilai tersimpan + computeServerOffsetMs di pemanggil).
+export const fetchServerExamTime = async (examId) => {
+  try {
+    if (!auth.currentUser) return null;
+    const token = await auth.currentUser.getIdToken();
+    const res = await fetch("/examTime", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ examId }),
+    });
+    const data = await res.json().catch(() => null);
+    return data && data.ok ? data : null;
+  } catch (error) {
+    console.error("Gagal mengambil waktu ujian otoritatif:", error);
+    return null;
+  }
+};
+
+// Selisih jam server vs jam perangkat siswa (ms), diukur saat attempt dibuat:
+// offset = waktu server - waktu klien. correctedNow = Date.now() + offset.
+// Mengembalikan 0 (perilaku lama) untuk attempt lama tanpa startedAtServer.
+export const computeServerOffsetMs = (attemptData) => {
+  try {
+    const serverMs = attemptData?.startedAtServer?.toMillis?.();
+    const clientMs = attemptData?.startedAt ? Date.parse(attemptData.startedAt) : NaN;
+    if (!serverMs || Number.isNaN(clientMs)) return 0;
+    return serverMs - clientMs;
+  } catch (_) {
+    return 0;
   }
 };
 
