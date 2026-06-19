@@ -1,7 +1,7 @@
 import { logout } from "../auth.js";
 import { listActiveExams, findSubmission, getExamAttempt, getSubmissionsForUser, getExamAttemptsForUser, getUserProfile } from "../db.js";
 import { requireRole } from "../rbac.js";
-import { isSEB } from "../seb-utils.js";
+import { isLockdown } from "../lockdown.js";
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -220,7 +220,8 @@ const renderPagination = (totalItems) => {
 
 document.querySelector("#logout-btn")?.addEventListener("click", async () => {
   await logout();
-  if (isSEB) {
+  if (isLockdown) {
+    // SEB & SUB sama-sama diarahkan ke exit page (yang dispatch cara keluar per browser)
     window.location.replace("/pages/exit-seb.html");
   } else {
     window.location.replace("/");

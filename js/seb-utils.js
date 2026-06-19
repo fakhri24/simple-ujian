@@ -20,6 +20,15 @@ export const isMacOSOrIPad = () => {
   );
 };
 
+// Check if running on Windows
+export const isWindows = () => {
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes("windows") || ua.includes("win32") || ua.includes("win64");
+};
+
+// Check if running on Android
+export const isAndroid = () => navigator.userAgent.toLowerCase().includes("android");
+
 // Check if the current browser environment enforces SEB (macOS and iPad)
 // TEMPORARILY DISABLED for testing — re-enable before production
 // export const enforceSEB = isMacOSOrIPad();

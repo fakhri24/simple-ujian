@@ -229,3 +229,185 @@ Keputusan: enforcement **per-ujian** lewat flag `requireSEB` (bukan global).
 - ConfigKey tidak boleh masuk repo; simpan di secret.
 - BEK sengaja TIDAK dipakai: spesifik-platform (macOS≠iOS) & berubah tiap
   update SEB di desktop → rapuh. Config Key cukup mendeteksi manipulasi config.
+
+---
+---
+
+# Rencana II: Abstraksi Lockdown Browser Multi-Platform (SEB / SUB / Android)
+
+## Latar belakang
+
+Pekerjaan di Rencana I terkunci pada satu lockdown browser: **SEB** (macOS/iPad).
+Sekarang sudah ada **SUB — Simple Ujian Browser**, browser desktop **Windows**
+buatan sendiri berbasis **WebView2 + C#**. Ke depan ingin menambah **Android**.
+Target: arsitektur yang **konsisten, namanya konsisten, dan fleksibel** —
+SEB/SUB/Android bukan tiga jalur terpisah yang saling tabrakan, melainkan satu
+payung konsep "lockdown browser" dengan strategi per-platform.
+
+Pemetaan platform → browser yang diharapkan:
+
+| Platform | Lockdown browser |
+|---|---|
+| macOS / iPadOS | **SEB** |
+| Windows | **SUB** (WebView2) |
+| Android (masa depan) | **SUB** (varian Android) |
+
+## Prinsip arsitektur: pisahkan 3 lapisan
+
+Akar tabrakan = mencampur tiga pertanyaan berbeda. Pisahkan:
+
+| Lapisan | Pertanyaan | Diwakili sekarang |
+|---|---|---|
+| **1. Deteksi** | Aku jalan di lockdown browser apa? | `isSEB` |
+| **2. Kebijakan platform** | Di platform ini, browser apa yang *seharusnya*? | `enforceSEB` (= `isMacOSOrIPad`) |
+| **3. Validasi/clearance** | Untuk ujian ini, apakah browser-nya sah? | `requireSEB` + config key (`seb-validate.js`) |
+
+Kunci anti-tabrakan dengan opsi admin "Wajib SEB + config key": **lapisan 2 (gate
+akses) dan lapisan 3 (validasi config key) SUDAH terpisah** di kode —
+`rbac.js` pakai `enforceSEB`, `seb-validate.js` pakai `requireSEB` per-ujian.
+Pemisahan itu dipertahankan; kita hanya menggenerikkan nama SEB → "lockdown" lalu
+**dispatch ke strategi per-browser** di lapisan 3. Config Key adalah konsep KHAS
+SEB — jangan dipaksakan ke SUB; SUB punya atestasi sendiri di bawah payung sama.
+
+## Aturan emas penamaan
+
+Nama **generik** untuk konsep payung; nama **browser-spesifik** hanya untuk hal
+yang memang khas browser itu (config key & quit-password → SEB; `postMessage`
+host & UA token → SUB).
+
+| Lama (SEB-spesifik) | Baru (generik) | Catatan |
+|---|---|---|
+| `isSEB` | `activeLockdown` / `isLockdown` | `isSEB` boleh tetap untuk cek SEB spesifik |
+| `enforceSEB` | `lockdownPolicyOn` + `expectedLockdown()` | dipecah: kebijakan global + peta platform |
+| `requireSEB` (per-ujian) | `requireLockdown` | perlu migrasi field DB / baca dua-duanya transisi |
+| `ensureSEBClearance` | `ensureLockdownClearance` (router) | `ensureSEBClearance` jadi strategi internal SEB |
+| `exit-seb.html` | *(dipertahankan)* | Quit URL SEB **dan** `exitUrl` SUB; keduanya auto-quit via navigasi ke URL ini |
+
+## Kontrak marker browser
+
+Setiap lockdown browser WAJIB menanam penanda yang sulit dipalsukan tab biasa:
+
+- **SEB**: `window.SafeExamBrowser` (sudah ada) / UA mengandung `SEB`.
+- **SUB (WebView2)**, dipasang host C#:
+  1. **User-Agent** di-append token: `... SimpleUjianBrowser/1.0`.
+     `webView.CoreWebView2.Settings.UserAgent += " SimpleUjianBrowser/1.0";`
+  2. **Window object** di-inject SEBELUM JS halaman jalan (tiap navigasi):
+     ```csharp
+     await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+       "window.SimpleUjianBrowser = { version: '1.0', platform: 'webview2' };");
+     ```
+     Meniru perilaku `window.SafeExamBrowser` → anti-spoof lebih kuat dari UA saja.
+
+## Modul inti (sketsa) — `js/lockdown.js`
+
+```js
+export const Lockdown = Object.freeze({ NONE:"none", SEB:"seb", SUB:"sub" });
+
+// LAPISAN 1 — yang AKTIF sekarang
+export function detectLockdown() {
+  const ua = navigator.userAgent;
+  if (window.SafeExamBrowser || /SEB|SafeExamBrowser/.test(ua)) return Lockdown.SEB;
+  if (window.SimpleUjianBrowser || ua.includes("SimpleUjianBrowser")) return Lockdown.SUB;
+  return Lockdown.NONE;
+}
+export const activeLockdown = detectLockdown();   // pengganti `isSEB`
+export const isLockdown = activeLockdown !== Lockdown.NONE;
+
+// LAPISAN 2 — yang DIHARAPKAN di platform ini
+export function expectedLockdown() {
+  if (isMacOSOrIPad()) return Lockdown.SEB;
+  if (isWindows())     return Lockdown.SUB;
+  if (isAndroid())     return Lockdown.SUB;   // masa depan
+  return Lockdown.NONE;
+}
+export const lockdownPolicyOn = false;          // kill-switch global (ganti enforceSEB=false)
+export function lockdownSatisfied() {
+  if (!lockdownPolicyOn) return true;
+  const want = expectedLockdown();
+  return want === Lockdown.NONE || activeLockdown === want;
+}
+```
+
+(Tambah `isWindows()` / `isAndroid()` di sebelah `isMacOSOrIPad()` yang sudah ada.)
+
+---
+
+## Tahap L1 — Fondasi deteksi & exit (LOW-RISK, tidak menyentuh backend)
+
+Menjawab kebutuhan hari ini: logout dari SUB juga diarahkan ke exit page yang sama.
+
+1. [x] Buat `js/lockdown.js`: enum `Lockdown`, `detectLockdown`, `activeLockdown`,
+       `isLockdown`, `expectedLockdown`, `lockdownPolicyOn`, `lockdownSatisfied`.
+       `isWindows()` / `isAndroid()` ditambah di `seb-utils.js` (samping
+       `isMacOSOrIPad`) lalu di-impor `lockdown.js`.
+2. [x] `seb-utils.js`: `isSEB` dipertahankan (cek SEB spesifik); belum perlu
+       re-export karena impor lama (`rbac.js`/`loginPage.js`) belum disentuh (L2).
+3. [x] **Nama file `pages/exit-seb.html` DIPERTAHANKAN** (bukan di-rename) &
+       isinya **tetap statis** (tanpa script sadar-browser). URL itu adalah
+       **Quit URL** SEB (tertanam di `.seb` produksi terenkripsi) **sekaligus**
+       `exitUrl` SUB (di `lockdown-config.json`). Kedua browser auto-quit lewat
+       **navigasi ke URL ini** — mekanisme yang sama.
+4. [x] `js/pages/studentPage.js`: `if (isSEB)` → `if (isLockdown)`; impor dari
+       `lockdown.js`. SEB & SUB → exit page; non-lockdown → `/`.
+5. [x] Sisi host C# (repo `simple-ujian-browser-desktop`): pasang **marker saja**
+       (UA token + `window.SimpleUjianBrowser`) di `MainWindow.InitializeWebViewAsync`.
+       **TIDAK perlu** `WebMessageReceived`/`postMessage` — SUB sudah punya
+       `OnNavigationStarting` yang auto-quit saat web menavigasi ke `exitUrl`.
+
+**Belum menyentuh** validasi config-key / DB / Cloud Function sama sekali.
+Build Vite hijau setelah perubahan ini.
+
+### TEMUAN KUNCI: SUB sudah punya mekanisme exit = SEB
+
+SUB mengambil `lockdown-config.json` dari Firebase Hosting; field `exitUrl` sudah
+diset ke `https://simple-ujian.web.app/pages/exit-seb.html`. `OnNavigationStarting`
+membatalkan navigasi ke `exitUrl` (`e.Cancel = true`) lalu menutup app **tanpa
+password** — identik dengan Quit URL SEB. Karena navigasi dibatalkan sebelum
+render, pendekatan `postMessage("quit")` jadi *dead code* di SUB → **dibatalkan**.
+Satu-satunya yang kurang dulu: **marker**, agar `isLockdown` true di web sehingga
+logout diarahkan ke `exitUrl` (yang lalu memicu auto-quit).
+
+### Panduan host C# WebView2 (langkah L1.5) — marker saja
+
+Di `MainWindow.InitializeWebViewAsync`, setelah `EnsureCoreWebView2Async()` &
+setelah set `Settings` keamanan:
+
+```csharp
+// Marker agar web (js/lockdown.js) mengenali SUB → terapkan alur lockdown.
+settings.UserAgent += " SimpleUjianBrowser/1.0";
+await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+    "window.SimpleUjianBrowser = { version: '1.0', platform: 'webview2' };");
+```
+
+Auto-quit saat logout SUDAH ditangani `OnNavigationStarting` + `exitUrl` yang ada.
+
+## Tahap L2 — Generalisasi clearance & enforcement (NANTI, sentuh backend + DB)
+
+1. [ ] Generikkan field per-ujian `requireSEB` → `requireLockdown` (migrasi /
+       baca dua-duanya saat transisi); label admin jadi "Wajib browser ujian".
+2. [ ] `ensureLockdownClearance(examId, exam)` sebagai **router**:
+       - `activeLockdown === SEB` → `ensureSEBClearance` (alur config-key sekarang).
+       - `activeLockdown === SUB` → `ensureSUBClearance` (atestasi SUB, baru).
+       - lainnya → tolak.
+3. [ ] Rancang **atestasi SUB**: host C# kirim token bertanda-tangan (mis. via
+       `postMessage` / header) yang diverifikasi Cloud Function — analog peran
+       config key SEB, tapi mekanisme milik SUB.
+4. [ ] `rbac.js` & `loginPage.js`: ganti gate `enforceSEB`/`isSEB` →
+       `lockdownSatisfied()` / `isLockdown` agar SUB diakui setara SEB.
+5. [ ] Firestore rules: generikkan `examRequiresSEB` → `examRequiresLockdown`;
+       clearance berlaku untuk SEB maupun SUB.
+
+## Catatan koeksistensi dengan Rencana I
+
+- Toggle admin tetap **satu** switch; platform yang menentukan browser & strategi
+  validasinya → tidak menambah beban admin, tidak tabrakan.
+- Alur config-key SEB (Fase 0–3 Rencana I) menjadi **satu strategi** di bawah
+  `ensureLockdownClearance`, bukan dibongkar.
+- Cleanup Fase 4 Rencana I (hapus `seb-check.html`, `sebEcho`, dll.) tetap berlaku
+  dan independen dari Rencana II.
+
+## Pertanyaan terbuka (perlu keputusan saat mulai)
+
+- Sisi host C# WebView2: setuju tombol exit memanggil
+  `window.chrome.webview.postMessage("quit")` (web menyiapkan pemanggilannya,
+  C# menangani penutupan app)? Ini menentukan implementasi langkah L1.3 & L1.4.
