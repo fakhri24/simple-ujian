@@ -131,6 +131,16 @@
                     required
                   />
 
+                  <label for="exam-min-submit">Boleh submit saat sisa (menit)</label>
+                  <input
+                    id="exam-min-submit"
+                    name="minSubmitBeforeEndMinutes"
+                    type="number"
+                    min="0"
+                    value="15"
+                  />
+                  <small class="meta-text">0 = matikan (boleh submit kapan saja)</small>
+
                   <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
                     <div class="stack" style="margin: 0;">
                       <label for="exam-start-time">Waktu Mulai</label>
@@ -691,6 +701,15 @@
               required
               style="background: white;"
             />
+
+            <label for="edit-exam-min-submit">Boleh submit saat sisa (menit)</label>
+            <input
+              id="edit-exam-min-submit"
+              type="number"
+              min="0"
+              style="background: white;"
+            />
+            <small class="meta-text">0 = matikan (boleh submit kapan saja)</small>
 
             <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
               <div class="stack" style="margin: 0;">

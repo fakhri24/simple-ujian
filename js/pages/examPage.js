@@ -51,7 +51,10 @@ let hasSubmitted = false;
 let isSystemPopupOpen = false;
 
 // Tombol "Selesai" baru aktif saat sisa waktu <= ambang ini (anti-submit terlalu dini).
-const MIN_REMAINING_TO_SUBMIT_SECONDS = 15 * 60;
+// Diisi per-ujian dari exam.minSubmitBeforeEndMinutes saat exam dimuat:
+//   0 = matikan (boleh submit kapan saja); undefined (ujian lama) = fallback 15 menit.
+let minSubmitBeforeEndMinutes = 15;
+let minRemainingToSubmitSeconds = minSubmitBeforeEndMinutes * 60;
 
 const hideGlobalLoading = () => {
   const globalLoading = document.querySelector("#global-loading-screen");
@@ -631,6 +634,10 @@ const bootstrap = async () => {
       const extraMinutes = Number(sessionAttemptData.extraMinutes || 0);
       const maxRemainingSeconds = (Number(exam.durationMinutes || 30) + extraMinutes) * 60;
 
+      // Ambang submit dini per-ujian (0 = matikan; undefined = fallback 15 menit).
+      minSubmitBeforeEndMinutes = Math.max(0, Number(exam.minSubmitBeforeEndMinutes ?? 15));
+      minRemainingToSubmitSeconds = minSubmitBeforeEndMinutes * 60;
+
       engine = createExamEngine({
         exam,
         questions: activeQuestions,
@@ -642,11 +649,12 @@ const bootstrap = async () => {
         onTimerTick: (seconds) => {
           timerEl.textContent = formatTime(seconds);
           if (submitBtn && !hasSubmitted) {
-            const locked = seconds > MIN_REMAINING_TO_SUBMIT_SECONDS;
+            const locked =
+              minRemainingToSubmitSeconds > 0 && seconds > minRemainingToSubmitSeconds;
             submitBtn.disabled = locked;
             submitBtn.classList.toggle("is-locked", locked);
             submitBtn.title = locked
-              ? "Tombol Selesai aktif saat sisa waktu ≤ 15 menit"
+              ? `Tombol Selesai aktif saat sisa waktu ≤ ${minSubmitBeforeEndMinutes} menit`
               : "";
           }
         },
@@ -919,12 +927,16 @@ const bootstrap = async () => {
       if (!engine || hasSubmitted) return;
 
       // Cegah submit terlalu dini: tetap blokir meski semua soal sudah dijawab.
-      if (engine.remainingSeconds > MIN_REMAINING_TO_SUBMIT_SECONDS) {
+      // minRemainingToSubmitSeconds === 0 berarti fitur dimatikan (boleh submit kapan saja).
+      if (
+        minRemainingToSubmitSeconds > 0 &&
+        engine.remainingSeconds > minRemainingToSubmitSeconds
+      ) {
         const menitLagi = Math.ceil(
-          (engine.remainingSeconds - MIN_REMAINING_TO_SUBMIT_SECONDS) / 60
+          (engine.remainingSeconds - minRemainingToSubmitSeconds) / 60
         );
         feedbackEl.textContent =
-          `Belum bisa mengirim. Tombol Selesai aktif saat sisa waktu ≤ 15 menit (sekitar ${menitLagi} menit lagi).`;
+          `Belum bisa mengirim. Tombol Selesai aktif saat sisa waktu ≤ ${minSubmitBeforeEndMinutes} menit (sekitar ${menitLagi} menit lagi).`;
         return;
       }
 

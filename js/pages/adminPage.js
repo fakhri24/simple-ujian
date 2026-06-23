@@ -544,6 +544,7 @@ document
         title: String(data.get("title") || "").trim(),
         description: String(data.get("description") || "").trim(),
         durationMinutes: Number(data.get("durationMinutes") || 30),
+        minSubmitBeforeEndMinutes: Math.max(0, Number(data.get("minSubmitBeforeEndMinutes") ?? 15)),
         startTime,
         latestStartTime,
         allowMultipleAttempts: data.get("allowMultipleAttempts") === "true",
@@ -847,7 +848,8 @@ const openEditExamModal = (exam) => {
   document.querySelector("#edit-exam-title").value = exam.title;
   document.querySelector("#edit-exam-description").value = exam.description || "";
   document.querySelector("#edit-exam-duration").value = exam.durationMinutes || 30;
-  
+  document.querySelector("#edit-exam-min-submit").value = exam.minSubmitBeforeEndMinutes ?? 15;
+
   const startTime = toJsDate(exam.startTime);
   const latestStartTime = toJsDate(exam.latestStartTime);
   
@@ -924,6 +926,7 @@ editExamForm?.addEventListener("submit", async (e) => {
   const title = document.querySelector("#edit-exam-title").value.trim();
   const description = document.querySelector("#edit-exam-description").value.trim();
   const durationMinutes = Number(document.querySelector("#edit-exam-duration").value);
+  const minSubmitBeforeEndMinutes = Math.max(0, Number(document.querySelector("#edit-exam-min-submit")?.value ?? 15));
   const startTimeVal = document.querySelector("#edit-exam-start-time").value;
   const latestStartTimeVal = document.querySelector("#edit-exam-latest-start-time").value;
 
@@ -953,6 +956,7 @@ editExamForm?.addEventListener("submit", async (e) => {
       title,
       description,
       durationMinutes,
+      minSubmitBeforeEndMinutes,
       startTime,
       latestStartTime,
       allowMultipleAttempts,
