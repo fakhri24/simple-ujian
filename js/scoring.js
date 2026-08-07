@@ -1,3 +1,5 @@
+import { matchAnswer } from "./answerMatcher.js";
+
 const normalizeArray = (value) => {
   if (!Array.isArray(value)) {
     return [];
@@ -14,9 +16,55 @@ const exactMatchArray = (a, b) => {
   return left.every((item, index) => item === right[index]);
 };
 
+/**
+ * Essay: dinilai otomatis hanya jika soal punya kunci dan autoGrade menyala.
+ * Tanpa itu, perilakunya sama seperti sebelumnya (menunggu koreksi guru).
+ *
+ * Saat jawaban tidak cocok, default-nya dilempar ke koreksi manual
+ * (onMismatch: "manual") agar mesin tidak pernah menyalahkan siswa diam-diam.
+ * Guru bisa memilih "wrong" per soal kalau sudah percaya kuncinya.
+ */
+const scoreEssay = (question, answer, weight) => {
+  const answerKey = question.answerKey;
+  if (!question.autoGrade || !answerKey) {
+    return { score: 0, status: "manual" };
+  }
+
+  const result = matchAnswer(answerKey, answer);
+  if (!result.hasKey) {
+    return { score: 0, status: "manual" };
+  }
+
+  if (result.ratio >= 1) {
+    return {
+      score: weight,
+      status: "correct",
+      autoGraded: true,
+      readAs: result.readAs,
+    };
+  }
+
+  if (result.ratio > 0) {
+    return {
+      score: Number((result.ratio * weight).toFixed(2)),
+      status: "partial",
+      autoGraded: true,
+      readAs: result.readAs,
+    };
+  }
+
+  const onMismatch = question.onMismatch === "wrong" ? "wrong" : "manual";
+  return {
+    score: 0,
+    status: onMismatch,
+    autoGraded: onMismatch === "wrong",
+    readAs: result.readAs,
+  };
+};
+
 export const scoreQuestion = (question, answer, weight = 100) => {
   if (question.type === "essay") {
-    return { score: 0, status: "manual" };
+    return scoreEssay(question, answer, weight);
   }
 
   if (question.type === "match") {
@@ -114,13 +162,24 @@ export const calculateScore = (questions, answersByQuestionId) => {
     const result = scoreQuestion(question, answersByQuestionId[question.id], weight);
     totalRawPoints += result.score;
 
-    return {
+    const entry = {
       questionId: question.id,
       type: question.type,
       status: result.status,
       score: result.score,
       scoreWeight: weight,
     };
+
+    // Jejak penilaian otomatis (dipakai badge & tombol "nilai ulang" di rekap).
+    // Firestore menolak undefined, jadi field hanya ditulis saat memang ada.
+    if (result.autoGraded) {
+      entry.autoGraded = true;
+    }
+    if (result.readAs) {
+      entry.readAs = result.readAs;
+    }
+
+    return entry;
   });
 
   let total = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * 100 : 0;

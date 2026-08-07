@@ -141,7 +141,7 @@
                   />
                   <small class="meta-text">0 = matikan (boleh submit kapan saja)</small>
 
-                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                  <div class="grid-responsive-2-form">
                     <div class="stack" style="margin: 0;">
                       <label for="exam-start-time">Waktu Mulai</label>
                       <input
@@ -162,7 +162,7 @@
                     </div>
                   </div>
 
-                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                  <div class="grid-responsive-2-form">
                     <div class="stack" style="margin: 0;">
                       <label for="exam-attempts-policy">Kebijakan Pengerjaan</label>
                       <select id="exam-attempts-policy" name="allowMultipleAttempts">
@@ -179,7 +179,7 @@
                     </div>
                   </div>
 
-                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                  <div class="grid-responsive-2-form">
                     <div class="stack" style="margin: 0;">
                       <label for="exam-visibility">Visibilitas</label>
                       <select id="exam-visibility" name="visibility">
@@ -196,7 +196,7 @@
                     </div>
                   </div>
 
-                  <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                  <div class="grid-responsive-2-form">
                     <div class="stack" style="margin: 0;">
                       <label for="exam-active">Status</label>
                       <select id="exam-active" name="active">
@@ -209,6 +209,16 @@
                       <select id="exam-require-seb" name="requireSEB">
                         <option value="false" selected>Tidak</option>
                         <option value="true">Ya (validasi Config Key SEB)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="grid-responsive-2-form">
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-enable-workspace">Kolom Coretan Kanan (Cetak PDF)</label>
+                      <select id="exam-enable-workspace" name="enableWorkspaceColumn">
+                        <option value="true" selected>Ya (1/2 Soal, 1/2 Lembar Kerja)</option>
+                        <option value="false">Tidak (Full Lebar Soal)</option>
                       </select>
                     </div>
                   </div>
@@ -228,7 +238,16 @@
 
               <section class="card" id="exam-list-section" style="display: flex; flex-direction: column; min-height: 720px;">
                 <h2>Daftar Ujian</h2>
-                <div class="exam-list-scroll-wrapper" style="flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding-right: 0.5rem; margin-top: 1rem;">
+                <!-- Search & Filter Controls -->
+                <div class="exam-list-controls" style="display: flex; gap: 0.75rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">
+                  <input type="text" id="exam-search-input" placeholder="Cari ujian..." style="background: white; flex: 1; padding: 0.5rem 0.75rem; font-size: 0.9rem;" />
+                  <select id="exam-status-filter" style="background: white; width: 140px; padding: 0.5rem 0.75rem; font-size: 0.9rem;">
+                    <option value="all">Semua Status</option>
+                    <option value="active">Aktif</option>
+                    <option value="inactive">Nonaktif</option>
+                  </select>
+                </div>
+                <div class="exam-list-scroll-wrapper" style="flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding-right: 0.5rem; margin-top: 0.5rem;">
                   <ul id="exam-list" class="list"></ul>
                 </div>
               </section>
@@ -244,7 +263,7 @@
               </p>
               
               <!-- Sumber Soal -->
-              <div class="editor-sources grid-2" style="grid-template-columns: repeat(3, 1fr); gap: 1rem; padding: 0; margin-bottom: 1.5rem;">
+              <div class="editor-sources grid-responsive-3" style="margin-bottom: 1.5rem;">
                 <div class="stack" style="margin-top: 0; background: rgba(255, 255, 255, 0.4); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
                   <div>
                     <h3 style="margin-top: 0; font-size: 1.05rem; color: var(--brand);">1. Muat dari Ujian Aktif</h3>
@@ -290,7 +309,7 @@
                     </h3>
                     
                     <div class="stack editor-form-scroll" style="gap: 0.85rem; margin-top: 0;">
-                      <div class="grid-2" style="grid-template-columns: 1.2fr 0.8fr; gap: 1rem; padding: 0;">
+                      <div class="grid-q-editor-meta">
                         <div class="stack" style="margin: 0;">
                           <label for="edit-q-type">Tipe Soal</label>
                           <select id="edit-q-type" required style="background: white;">
@@ -305,6 +324,16 @@
                         <div class="stack" style="margin: 0;">
                           <label for="edit-q-score">Bobot Nilai</label>
                           <input id="edit-q-score" type="number" min="1" value="10" required style="background: white;" />
+                        </div>
+                      </div>
+                      
+                      <div class="stack" style="margin: 0;">
+                        <label for="edit-q-passage">Grup Soal / Wacana</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                          <select id="edit-q-passage" style="background: white; flex: 1; margin: 0; padding: 0.5rem 1rem;">
+                            <option value="">Tanpa Grup (Soal Mandiri)</option>
+                          </select>
+                          <button type="button" id="edit-manage-passages-btn" class="secondary" style="padding: 0.5rem 0.75rem; flex-shrink: 0; line-height: 1; height: 38px; display: inline-flex; align-items: center; justify-content: center; margin: 0; font-size: 1.1rem; border-radius: 8px;" title="Kelola Grup Soal">⚙️</button>
                         </div>
                       </div>
                       
@@ -456,7 +485,7 @@
             <div class="stack" style="gap: 1.5rem; max-width: 100%; margin: 0; padding: 0;">
               
               <!-- Baris Atas: Form Manual (Kiri) & Impor CSV (Kanan) -->
-              <div class="grid-2" style="max-width: 100%; margin: 0; padding: 0; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+              <div class="grid-responsive-2" style="max-width: 100%;">
                 
                 <!-- Card 1: Tambah Manual -->
                 <section class="card" style="margin: 0; height: 100%;">
@@ -472,7 +501,7 @@
                     <label for="student-password">Password</label>
                     <input id="student-password" name="password" type="password" required minlength="6" placeholder="Minimal 6 karakter" style="background: white;" />
 
-                    <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+                    <div class="grid-responsive-2-form">
                       <div class="stack" style="margin: 0;">
                         <label for="student-class">Kelas</label>
                         <input id="student-class" name="kelas" required placeholder="Contoh: XII-IPA-1" style="background: white;" />
@@ -646,7 +675,7 @@
           <button type="button" id="close-submission-detail-btn" class="remove-row-btn" aria-label="Tutup detail" style="font-size: 1.1rem; width: 2.5rem; height: 2.5rem;">✕</button>
         </header>
         <main class="modal-body stack" style="margin-top: 1.5rem; max-height: 70vh; overflow-y: auto; padding-right: 0.5rem;">
-          <div class="grid-2" style="padding: 0; margin-bottom: 1rem; gap: 1rem; grid-template-columns: repeat(4, 1fr);">
+          <div class="grid-responsive-4" style="margin-bottom: 1rem;">
             <div>
               <p style="margin: 0; font-size: 0.85rem;" class="muted">Siswa</p>
               <strong id="detail-student-email" style="font-size: 0.95rem; word-break: break-all;">-</strong>
@@ -666,6 +695,7 @@
           </div>
           <div id="detail-questions-container" class="stack" style="gap: 1.5rem;"></div>
           <div id="detail-grading-actions" class="stack hidden" style="margin-top: 1rem; border-top: 1.5px solid var(--border); padding-top: 1.5rem; flex-direction: row; justify-content: flex-end; gap: 1rem;">
+            <button type="button" id="regrade-auto-btn" class="secondary">🤖 Nilai Ulang Otomatis</button>
             <button type="button" id="save-grading-btn" style="background: var(--success);">Simpan Koreksi Essay</button>
           </div>
         </main>
@@ -711,7 +741,7 @@
             />
             <small class="meta-text">0 = matikan (boleh submit kapan saja)</small>
 
-            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+            <div class="grid-responsive-2-form">
               <div class="stack" style="margin: 0;">
                 <label for="edit-exam-start-time">Waktu Mulai</label>
                 <input
@@ -732,7 +762,7 @@
               </div>
             </div>
 
-            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+            <div class="grid-responsive-2-form">
               <div class="stack" style="margin: 0;">
                 <label for="edit-exam-attempts-policy">Kebijakan Pengerjaan</label>
                 <select id="edit-exam-attempts-policy" style="background: white;">
@@ -749,7 +779,7 @@
               </div>
             </div>
 
-            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+            <div class="grid-responsive-2-form">
               <div class="stack" style="margin: 0;">
                 <label for="edit-exam-visibility">Visibilitas</label>
                 <select id="edit-exam-visibility" name="visibility" style="background: white;">
@@ -766,7 +796,7 @@
               </div>
             </div>
 
-            <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0; margin: 0;">
+            <div class="grid-responsive-2-form">
               <div class="stack" style="margin: 0;">
                 <label for="edit-exam-active">Status</label>
                 <select id="edit-exam-active" style="background: white;">
@@ -779,6 +809,16 @@
                 <select id="edit-exam-require-seb" style="background: white;">
                   <option value="false">Tidak</option>
                   <option value="true">Ya (validasi Config Key SEB)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid-responsive-2-form">
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-enable-workspace">Kolom Coretan Kanan (Cetak PDF)</label>
+                <select id="edit-exam-enable-workspace" style="background: white;">
+                  <option value="true">Ya (1/2 Soal, 1/2 Lembar Kerja)</option>
+                  <option value="false">Tidak (Full Lebar Soal)</option>
                 </select>
               </div>
             </div>
@@ -797,6 +837,62 @@
               <button type="submit" style="padding: 0.5rem 1.5rem;">Simpan Perubahan</button>
             </div>
           </form>
+        </main>
+      </div>
+    </div>
+
+    <!-- Modal Kelola Grup Soal / Wacana -->
+    <div id="manage-passages-modal" class="modal hidden" aria-hidden="true" role="dialog">
+      <div class="modal-content card" style="max-width: 1100px; width: 95vw; display: flex; flex-direction: column; height: 88vh;">
+        <header class="modal-header">
+          <h2>Kelola Grup Soal / Wacana</h2>
+          <button type="button" id="close-manage-passages-btn" class="remove-row-btn" aria-label="Tutup" style="font-size: 1.1rem; width: 2.5rem; height: 2.5rem;">✕</button>
+        </header>
+        <main class="modal-body" style="margin-top: 1rem; flex: 1; display: flex; flex-direction: column; gap: 1.5rem; overflow: hidden;">
+          
+          <!-- Split Layout: List of passages on left, Add/Edit form on right -->
+          <div style="display: flex; gap: 1.5rem; flex: 1; min-height: 0; flex-direction: row; align-items: stretch;">
+            
+            <!-- Left Side: List of Groups -->
+            <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; border-right: 1.5px solid var(--border); padding-right: 1.25rem; min-height: 0;">
+              <h3 style="margin-top: 0; font-size: 1rem; color: var(--brand);">Daftar Grup Soal (<span id="passages-count">0</span>)</h3>
+              <div id="passages-list-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; scrollbar-gutter: stable; padding-right: 0.25rem;">
+                <!-- Renders dynamically -->
+              </div>
+            </div>
+            
+            <!-- Right Side: Add/Edit Form -->
+            <div style="flex: 1.4; min-width: 380px; display: flex; flex-direction: column; gap: 1rem; overflow-y: auto;">
+              <h3 id="passage-form-title" style="margin-top: 0; font-size: 1rem; color: var(--brand);">Tambah Grup Soal Baru</h3>
+              <input type="hidden" id="passage-edit-id" />
+              
+              <div class="stack" style="margin: 0; gap: 0.25rem;">
+                <label for="passage-title" style="font-size: 0.85rem; font-weight: 600;">Judul Grup (Contoh: Wacana 1, Teks A)</label>
+                <input id="passage-title" type="text" placeholder="Masukkan judul..." style="background: white;" />
+              </div>
+              
+              <div class="stack" style="margin: 0; gap: 0.25rem; flex: 1; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="margin: 0; font-size: 0.85rem; font-weight: 600;">Isi Teks / Wacana (HTML / LaTeX)</label>
+                  <button type="button" id="passage-insert-img-btn" class="secondary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; border-radius: 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem; height: auto;">
+                    📷 Unggah Gambar
+                  </button>
+                  <input type="file" id="passage-image-file-input" accept="image/*" style="display: none;" />
+                </div>
+                <!-- WYSIWYG Editor (Quill) for Passage -->
+                <div id="passage-quill-wrapper" style="background: white; border-radius: 12px; overflow: hidden; border: 1.5px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.02); flex: 1; display: flex; flex-direction: column;">
+                  <div id="passage-quill-editor" style="flex: 1; min-height: 320px; font-family: inherit; font-size: 0.95rem;"></div>
+                </div>
+                <textarea id="passage-content" rows="4" style="display: none;" placeholder="Tulis atau paste teks narasi/wacana di sini..."></textarea>
+              </div>
+              
+              <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem;">
+                <button type="button" id="passage-cancel-btn" class="secondary" style="padding: 0.4rem 1rem; font-size: 0.85rem;">Batal</button>
+                <button type="button" id="passage-save-btn" style="padding: 0.4rem 1.25rem; font-size: 0.85rem;">Simpan Grup</button>
+              </div>
+            </div>
+          </div>
+          
         </main>
       </div>
     </div>

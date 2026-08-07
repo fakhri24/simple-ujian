@@ -31,7 +31,7 @@ import {
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { firebaseConfig } from "../app-config.js";
-import { renderQuestion } from "../questionRenderer.js";
+import { renderQuestion, escapeHtml } from "../questionRenderer.js";
 import renderMathInElement from "katex/contrib/auto-render";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../firebase-config.js";
@@ -43,6 +43,9 @@ import { initRealTimeRecap } from "./admin/recapManager.js";
 import { initStudentManagement } from "./admin/studentManagement.js";
 import "katex/dist/katex.min.css";
 import { calculateScore } from "../scoring.js";
+import { buildKeyPayload, mergeQuestionsWithKeys, publicAnswerFormat } from "../answerKeys.js";
+import { matchEssayKeyLine, buildEssayKeyFromDocx } from "../essayKeyDocx.js";
+import { matchAnswer, inferMode, describeAnswer } from "../answerMatcher.js";
 
 // Global caching variables
 const userProfileCache = new Map();
@@ -256,31 +259,32 @@ document.addEventListener("studentsChanged", (e) => {
 });
 
 
-const renderExams = async () => {
-  const exams = await listAllExams();
-  examsCache = exams;
-
-  const optionsHtml = exams
-    .map((exam) => `<option value="${exam.id}" data-questions="${(exam.questionIds || []).length}" data-duration="${exam.durationMinutes || 0}">${exam.title}</option>`)
-    .join("");
-
-
+const filterAndRenderExams = () => {
+  const searchInput = document.querySelector("#exam-search-input");
+  const statusFilter = document.querySelector("#exam-status-filter");
   
-  const editorLoadExamSelectEl = document.querySelector("#editor-load-exam");
-  const editorSaveExamSelectEl = document.querySelector("#editor-save-target-exam");
-  if (editorLoadExamSelectEl) {
-    editorLoadExamSelectEl.innerHTML = optionsHtml;
-  }
-  if (editorSaveExamSelectEl) {
-    editorSaveExamSelectEl.innerHTML = optionsHtml;
-  }
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  const status = statusFilter ? statusFilter.value : "all";
 
-  const recapFilterExamEl = document.querySelector("#recap-filter-exam");
-  if (recapFilterExamEl) {
-    recapFilterExamEl.innerHTML = `<option value="all">Semua Ujian</option>` + optionsHtml;
-  }
+  const filteredExams = examsCache.filter((exam) => {
+    // 1. Search filter (title or description)
+    const matchesSearch = !query || 
+      (exam.title || "").toLowerCase().includes(query) || 
+      (exam.description || "").toLowerCase().includes(query);
 
-  examListEl.innerHTML = exams
+    // 2. Status filter
+    const isActive = exam.active ?? true;
+    let matchesStatus = true;
+    if (status === "active") {
+      matchesStatus = isActive === true;
+    } else if (status === "inactive") {
+      matchesStatus = isActive === false;
+    }
+
+    return matchesSearch && matchesStatus;
+  });
+
+  examListEl.innerHTML = filteredExams
     .map((exam) => {
       const startText = exam.startTime
         ? (exam.startTime.toDate ? exam.startTime.toDate() : new Date(exam.startTime)).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })
@@ -294,8 +298,8 @@ const renderExams = async () => {
         ? `<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; border: 1.5px solid rgba(239, 68, 68, 0.15);">🔒 Privat (${(exam.assignedTo || []).length} Siswa)</span>`
         : `<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; border: 1.5px solid rgba(16, 185, 129, 0.15);">🌐 Publik</span>`;
 
-      const isActive = exam.active ?? true;
-      const activeBadgeHtml = isActive
+      const isActiveVal = exam.active ?? true;
+      const activeBadgeHtml = isActiveVal
         ? `<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; border: 1.5px solid rgba(16, 185, 129, 0.15);">🟢 Aktif</span>`
         : `<span class="badge" style="background: rgba(100, 116, 139, 0.1); color: #64748b; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; border: 1.5px solid rgba(100, 116, 139, 0.15);">⚪ Nonaktif</span>`;
 
@@ -354,8 +358,11 @@ const renderExams = async () => {
     })
     .join("");
 
-  updateDashboardStats(exams);
+  if (filteredExams.length === 0) {
+    examListEl.innerHTML = `<li class="muted" style="text-align: center; padding: 2rem; list-style-type: none;">Tidak ada ujian yang cocok dengan filter.</li>`;
+  }
 
+  // Register edit, remove, preview, and print actions
   examListEl.querySelectorAll(".edit-exam-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const examId = btn.dataset.id;
@@ -398,32 +405,17 @@ const renderExams = async () => {
 
         const { exam, questions } = loaded;
 
-        const mergedQuestions = questions.map(q => {
-          const key = keysMap[q.id];
-          if (!key) return q;
-          if (q.type === "pg" || q.type === "tf" || q.type === "pgk") {
-            return {
-              ...q,
-              options: q.options.map(opt => ({
-                ...opt,
-                isCorrect: (key.correctOptionIds || []).includes(opt.id)
-              }))
-            };
-          } else if (q.type === "tf_matrix") {
-            return {
-              ...q,
-              statements: q.statements.map(stmt => ({
-                ...stmt,
-                isCorrect: key.correctStatements?.[stmt.id] || "false"
-              }))
-            };
-          } else if (q.type === "match") {
-            return {
-              ...q,
-              matchPairs: key.matchPairs || []
-            };
+        const mergedQuestions = mergeQuestionsWithKeys(questions, keysMap).map(q => {
+          const mappedQ = { ...q };
+
+          if (q.passageId) {
+            const passage = (exam.passages || []).find(p => p.id === q.passageId);
+            if (passage) {
+              mappedQ.passageTitle = passage.title;
+              mappedQ.passageContent = passage.content;
+            }
           }
-          return q;
+          return mappedQ;
         });
 
         modalTitleEl.textContent = `Pratinjau: ${exam.title}`;
@@ -513,6 +505,33 @@ const renderExams = async () => {
   });
 };
 
+const renderExams = async () => {
+  const exams = await listAllExams();
+  examsCache = exams;
+
+  const optionsHtml = exams
+    .map((exam) => `<option value="${exam.id}" data-questions="${(exam.questionIds || []).length}" data-duration="${exam.durationMinutes || 0}">${exam.title}</option>`)
+    .join("");
+
+  const editorLoadExamSelectEl = document.querySelector("#editor-load-exam");
+  const editorSaveExamSelectEl = document.querySelector("#editor-save-target-exam");
+  if (editorLoadExamSelectEl) {
+    editorLoadExamSelectEl.innerHTML = optionsHtml;
+  }
+  if (editorSaveExamSelectEl) {
+    editorSaveExamSelectEl.innerHTML = optionsHtml;
+  }
+
+  const recapFilterExamEl = document.querySelector("#recap-filter-exam");
+  if (recapFilterExamEl) {
+    recapFilterExamEl.innerHTML = `<option value="all">Semua Ujian</option>` + optionsHtml;
+  }
+
+  updateDashboardStats(exams);
+
+  filterAndRenderExams();
+};
+
 document
   .querySelector("#create-exam-form")
   ?.addEventListener("submit", async (event) => {
@@ -552,6 +571,7 @@ document
         randomizeQuestions: data.get("randomizeQuestions") === "true",
         requireSEB: data.get("requireSEB") === "true",
         active: data.get("active") === "true",
+        enableWorkspaceColumn: data.get("enableWorkspaceColumn") !== "false",
         questionIds: [],
         visibility,
         assignedTo,
@@ -572,6 +592,11 @@ document
       if (examActiveSelect) {
         examActiveSelect.value = "true";
         examActiveSelect.dispatchEvent(new Event("change"));
+      }
+      const examWorkspaceSelect = document.querySelector("#exam-enable-workspace");
+      if (examWorkspaceSelect) {
+        examWorkspaceSelect.value = "true";
+        examWorkspaceSelect.dispatchEvent(new Event("change"));
       }
       feedbackEl.textContent = "Ujian berhasil dibuat.";
       await renderExams();
@@ -650,32 +675,77 @@ const splitOuterEqual = (str, preferLast = false) => {
 const parseImportedHtml = (htmlString) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlString, "text/html");
-  const paragraphs = [...doc.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, td")].filter((el) => {
-    return !el.parentElement || !el.parentElement.closest("p, h1, h2, h3, h4, h5, h6, li, td");
+  const paragraphs = [...doc.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, table")].filter((el) => {
+    return !el.parentElement || !el.parentElement.closest("p, h1, h2, h3, h4, h5, h6, li, table");
   });
 
   const questions = [];
   let currentQuestion = null;
 
+  const importedPassages = [];
+  let currentPassage = null;
+  let activePassageId = null;
+
   paragraphs.forEach((p) => {
     const text = p.textContent.trim();
-    const htmlContent = p.innerHTML.trim();
+    const htmlContent = p.tagName === "TABLE" ? p.outerHTML : p.innerHTML.trim();
 
     if (!text && !p.querySelector("img")) return;
+
+    // Check for Passage marker
+    const passageMatch = text.match(/^\[GRUP SOAL:\s*(.*)\]/i);
+    if (passageMatch) {
+      if (currentQuestion) {
+        questions.push(currentQuestion);
+        currentQuestion = null;
+      }
+      if (currentPassage) {
+        importedPassages.push(currentPassage);
+      }
+      const passageTitle = passageMatch[1].trim() || "Wacana";
+      const passageId = `p_import_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      currentPassage = {
+        id: passageId,
+        title: passageTitle,
+        contentParts: []
+      };
+      activePassageId = passageId;
+      return;
+    }
+
+    // Check for End Passage marker
+    if (text.match(/^\[(?:AKHIR GRUP SOAL|TANPA GRUP SOAL)\]/i)) {
+      if (currentQuestion) {
+        questions.push(currentQuestion);
+        currentQuestion = null;
+      }
+      if (currentPassage) {
+        importedPassages.push(currentPassage);
+        currentPassage = null;
+      }
+      activePassageId = null;
+      return;
+    }
 
     const questionMatch = text.match(/^(\d+)[\.\)]\s*(.*)/);
     if (questionMatch) {
       if (currentQuestion) {
         questions.push(currentQuestion);
       }
+      if (currentPassage) {
+        importedPassages.push(currentPassage);
+        currentPassage = null;
+      }
       currentQuestion = {
         type: "pg",
         scoreWeight: 10,
+        passageId: activePassageId || "",
         contentParts: [],
         options: [],
         matchPairs: [],
         statements: [],
         keyString: "",
+        essayLines: {},
       };
       
       const restText = questionMatch[2].trim();
@@ -686,89 +756,112 @@ const parseImportedHtml = (htmlString) => {
       return;
     }
 
-    if (!currentQuestion) return;
+    if (!currentQuestion && !currentPassage) return;
 
-    if (text.toLowerCase().startsWith("tipe:")) {
-      currentQuestion.type = text.split(":")[1].trim().toLowerCase();
-      return;
-    }
-
-    if (text.toLowerCase().startsWith("bobot:")) {
-      currentQuestion.scoreWeight = Number(text.split(":")[1].trim()) || 10;
-      return;
-    }
-
-    if (text.toLowerCase().startsWith("kunci:")) {
-      currentQuestion.keyString = text.split(":")[1].trim();
-      return;
-    }
-
-    if (text.toLowerCase().startsWith("pasangan:")) {
-      const contentPart = text.substring(text.indexOf(":") + 1);
-      const parts = splitOuterEqual(contentPart, false); // split by first '=' outside math
-      if (parts) {
-        currentQuestion.matchPairs.push({
-          left: parts[0],
-          right: parts[1],
-        });
+    if (currentQuestion) {
+      if (text.toLowerCase().startsWith("tipe:")) {
+        currentQuestion.type = text.split(":")[1].trim().toLowerCase();
+        return;
       }
-      return;
-    }
 
-    if (text.toLowerCase().startsWith("pernyataan:")) {
-      const contentPart = text.substring(text.indexOf(":") + 1);
-      const parts = splitOuterEqual(contentPart, true); // split by last '=' outside math
-      if (parts) {
-        const stmtText = parts[0];
-        const isCorrectVal = parts[1].toLowerCase() === "benar" ? "true" : "false";
-        const stmtIndex = currentQuestion.statements.length + 1;
-        currentQuestion.statements.push({
-          id: `stmt_${stmtIndex}`,
-          text: stmtText,
-          isCorrect: isCorrectVal,
-        });
+      if (text.toLowerCase().startsWith("bobot:")) {
+        currentQuestion.scoreWeight = Number(text.split(":")[1].trim()) || 10;
+        return;
       }
-      return;
-    }
 
-    // Check if it's multiple options on one line
-    const horizontalOptions = splitHorizontalOptions(text);
-    if (horizontalOptions) {
-      horizontalOptions.forEach((opt) => {
+      if (text.toLowerCase().startsWith("kunci:")) {
+        // Jangan pakai split(":") — kunci essay boleh mengandung ":" (mis. 3:4).
+        currentQuestion.keyString = text.substring(text.indexOf(":") + 1).trim();
+        return;
+      }
+
+      // Baris pelengkap kunci essay: Alternatif, Mode, Toleransi, Satuan,
+      // Jika salah. Labelnya baku, jadi tidak boleh dipakai sebagai teks soal.
+      const essayLine = matchEssayKeyLine(text);
+      if (essayLine) {
+        currentQuestion.essayLines[essayLine.field] = essayLine.value;
+        return;
+      }
+
+      if (text.toLowerCase().startsWith("pasangan:")) {
+        const contentPart = text.substring(text.indexOf(":") + 1);
+        const parts = splitOuterEqual(contentPart, false); // split by first '=' outside math
+        if (parts) {
+          currentQuestion.matchPairs.push({
+            left: parts[0],
+            right: parts[1],
+          });
+        }
+        return;
+      }
+
+      if (text.toLowerCase().startsWith("pernyataan:")) {
+        const contentPart = text.substring(text.indexOf(":") + 1);
+        const parts = splitOuterEqual(contentPart, true); // split by last '=' outside math
+        if (parts) {
+          const stmtText = parts[0];
+          const isCorrectVal = parts[1].toLowerCase() === "benar" ? "true" : "false";
+          const stmtIndex = currentQuestion.statements.length + 1;
+          currentQuestion.statements.push({
+            id: `stmt_${stmtIndex}`,
+            text: stmtText,
+            isCorrect: isCorrectVal,
+          });
+        }
+        return;
+      }
+
+      // Check if it's multiple options on one line
+      const horizontalOptions = splitHorizontalOptions(text);
+      if (horizontalOptions) {
+        horizontalOptions.forEach((opt) => {
+          currentQuestion.options.push({
+            id: `opt_${currentQuestion.options.length + 1}`,
+            _importLetter: opt.letter,
+            text: opt.text,
+            isCorrect: false,
+          });
+        });
+        return;
+      }
+
+      // Check if it's a single option on a line
+      const optionMatch = text.match(/^([A-Z])[\.\)]\s*(.*)/i);
+      if (optionMatch) {
+        const letter = optionMatch[1].toLowerCase();
+        const optionText = optionMatch[2].trim();
         currentQuestion.options.push({
           id: `opt_${currentQuestion.options.length + 1}`,
-          _importLetter: opt.letter,
-          text: opt.text,
+          _importLetter: letter,
+          text: optionText,
           isCorrect: false,
         });
-      });
-      return;
+        return;
+      }
     }
 
-    // Check if it's a single option on a line
-    const optionMatch = text.match(/^([A-Z])[\.\)]\s*(.*)/i);
-    if (optionMatch) {
-      const letter = optionMatch[1].toLowerCase();
-      const optionText = optionMatch[2].trim();
-      currentQuestion.options.push({
-        id: `opt_${currentQuestion.options.length + 1}`,
-        _importLetter: letter,
-        text: optionText,
-        isCorrect: false,
-      });
-      return;
+    // Default fallback
+    if (currentPassage) {
+      currentPassage.contentParts.push(htmlContent);
+    } else if (currentQuestion) {
+      currentQuestion.contentParts.push(htmlContent);
     }
-
-    // Default: this is part of the question content
-    currentQuestion.contentParts.push(htmlContent);
   });
 
   if (currentQuestion) {
     questions.push(currentQuestion);
   }
+  if (currentPassage) {
+    importedPassages.push(currentPassage);
+  }
 
-  return questions.map((q) => {
-    const content = q.contentParts.map((part) => `<p>${part}</p>`).join("");
+  const mappedQuestions = questions.map((q) => {
+    const content = q.contentParts.map((part) => {
+      if (part.trim().startsWith("<table")) {
+        return part;
+      }
+      return `<p>${part}</p>`;
+    }).join("");
 
     if (q.type === "pg" || q.type === "tf") {
       const keyLetter = q.keyString.trim().toLowerCase();
@@ -805,6 +898,7 @@ const parseImportedHtml = (htmlString) => {
       type: q.type,
       content: content || "<p>Soal tanpa teks.</p>",
       scoreWeight: q.scoreWeight,
+      passageId: q.passageId || "",
     };
 
     if (q.type === "pg" || q.type === "pgk" || q.type === "tf") {
@@ -813,10 +907,28 @@ const parseImportedHtml = (htmlString) => {
       finalQuestion.matchPairs = q.matchPairs;
     } else if (q.type === "tf_matrix") {
       finalQuestion.statements = q.statements;
+    } else if (q.type === "essay") {
+      Object.assign(
+        finalQuestion,
+        buildEssayKeyFromDocx({ kunci: q.keyString, ...q.essayLines })
+      );
     }
 
     return finalQuestion;
   });
+
+  const mappedPassages = importedPassages.map(p => ({
+    id: p.id,
+    title: p.title,
+    content: p.contentParts.map(part => {
+      if (part.trim().startsWith("<table")) {
+        return part;
+      }
+      return `<p>${part}</p>`;
+    }).join("")
+  }));
+
+  return { questions: mappedQuestions, passages: mappedPassages };
 };
 
 
@@ -860,11 +972,13 @@ const openEditExamModal = (exam) => {
   const showResultsImmediately = exam.showResultsImmediately ?? true;
   const randomizeQuestions = exam.randomizeQuestions ?? false;
   const requireSEB = exam.requireSEB ?? false;
+  const enableWorkspaceColumn = exam.enableWorkspaceColumn ?? true;
 
   const attemptsEl = document.querySelector("#edit-exam-attempts-policy");
   const resultsEl = document.querySelector("#edit-exam-results-policy");
   const randomizeQuestionsEl = document.querySelector("#edit-exam-randomize-questions");
   const requireSEBEl = document.querySelector("#edit-exam-require-seb");
+  const enableWorkspaceEl = document.querySelector("#edit-exam-enable-workspace");
 
   if (attemptsEl) {
     attemptsEl.value = String(allowMultipleAttempts);
@@ -880,6 +994,9 @@ const openEditExamModal = (exam) => {
   }
   if (requireSEBEl) {
     requireSEBEl.value = String(requireSEB);
+  }
+  if (enableWorkspaceEl) {
+    enableWorkspaceEl.value = String(enableWorkspaceColumn);
   }
 
   const visibility = exam.visibility || "public";
@@ -935,6 +1052,7 @@ editExamForm?.addEventListener("submit", async (e) => {
   const randomizeQuestions = document.querySelector("#edit-exam-randomize-questions")?.value === "true";
   const requireSEB = document.querySelector("#edit-exam-require-seb")?.value === "true";
   const active = document.querySelector("#edit-exam-active")?.value === "true";
+  const enableWorkspaceColumn = document.querySelector("#edit-exam-enable-workspace")?.value === "true";
   const visibility = document.querySelector("#edit-exam-visibility")?.value || "public";
   const assignedTo = visibility === "private" ? (editStudentPickerInstance ? editStudentPickerInstance.getSelectedUids() : []) : [];
  
@@ -964,6 +1082,7 @@ editExamForm?.addEventListener("submit", async (e) => {
       randomizeQuestions,
       requireSEB,
       active,
+      enableWorkspaceColumn,
       visibility,
       assignedTo
     });
@@ -1003,9 +1122,11 @@ document.querySelector("#logout-btn")?.addEventListener("click", async () => {
 /* ── Editor Soal Interaktif (Word Import & Export) ─────────────────────── */
 
 let editorQuestions = [];
+let editorPassages = [];
 let selectedEditorQIndex = null;
 let editorTempImages = {}; // Map of placeholder -> base64 data URL
 window.editQuill = null;
+window.passageQuill = null;
 
 const initQuillEditor = () => {
   if (window.editQuill) return;
@@ -1033,6 +1154,35 @@ const initQuillEditor = () => {
     if (textarea && textarea.value !== cleanHtml) {
       textarea.value = cleanHtml;
       textarea.dispatchEvent(new Event("input"));
+    }
+  });
+};
+
+const initPassageQuillEditor = () => {
+  if (window.passageQuill) return;
+
+  const container = document.querySelector("#passage-quill-editor");
+  if (!container) return;
+
+  window.passageQuill = new Quill("#passage-quill-editor", {
+    theme: "snow",
+    placeholder: "Ketik teks wacana atau masukkan LaTeX / gambar...",
+    modules: {
+      toolbar: [
+        ["bold", "italic", "underline", "strike"],
+        [{ "list": "ordered"}, { "list": "bullet" }],
+        [{ "direction": "rtl" }],
+        ["clean"]
+      ]
+    }
+  });
+
+  window.passageQuill.on("text-change", () => {
+    const rawHtml = window.passageQuill.root.innerHTML;
+    const cleanHtml = extractBase64ImagesToPlaceholders(rawHtml);
+    const textarea = document.querySelector("#passage-content");
+    if (textarea && textarea.value !== cleanHtml) {
+      textarea.value = cleanHtml;
     }
   });
 };
@@ -1176,6 +1326,232 @@ const scrollEditorAndPreviewToBottom = () => {
   }, 80);
 };
 
+// --- Kunci jawaban essay (auto-grade) -------------------------------------
+
+const ESSAY_MODE_LABELS = {
+  numeric: "Angka / Matematika",
+  text: "Teks",
+  keywords: "Kata kunci",
+};
+
+/** Baca panel kunci essay dari form menjadi bentuk yang dipakai scoring.js. */
+const readEssayKeyFromFields = () => {
+  const autoGrade = Boolean(editDynamicFieldsEl.querySelector(".essay-auto-grade")?.checked);
+  if (!autoGrade) {
+    return { autoGrade: false, answerKey: null, onMismatch: "manual" };
+  }
+
+  const linesOf = (selector) =>
+    (editDynamicFieldsEl.querySelector(selector)?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+  const accepted = linesOf(".essay-key-accepted");
+  const partialAccepted = linesOf(".essay-key-partial");
+  const partialRatio = Number(editDynamicFieldsEl.querySelector(".essay-key-partial-ratio")?.value) || 0;
+
+  const answerKey = {
+    mode: editDynamicFieldsEl.querySelector(".essay-key-mode")?.value || "auto",
+    accepted,
+    tolerance: Number(editDynamicFieldsEl.querySelector(".essay-key-tolerance")?.value) || 0,
+    requireSimplified: Boolean(editDynamicFieldsEl.querySelector(".essay-key-simplified")?.checked),
+    requireUnit: editDynamicFieldsEl.querySelector(".essay-key-unit")?.value.trim() || "",
+    ignoreCase: Boolean(editDynamicFieldsEl.querySelector(".essay-key-ignore-case")?.checked),
+    ignorePunctuation: Boolean(editDynamicFieldsEl.querySelector(".essay-key-ignore-punct")?.checked),
+    typoTolerance: Number(editDynamicFieldsEl.querySelector(".essay-key-typo")?.value) || 0,
+  };
+
+  if (partialAccepted.length > 0 && partialRatio > 0) {
+    answerKey.partial = [{ accepted: partialAccepted, ratio: partialRatio / 100 }];
+  }
+
+  const onMismatch =
+    editDynamicFieldsEl.querySelector(".essay-key-mismatch")?.value === "wrong" ? "wrong" : "manual";
+
+  return { autoGrade, answerKey, onMismatch };
+};
+
+/** Tampilkan hanya opsi yang relevan dengan mode kunci yang dipilih. */
+const syncEssayKeyVisibility = () => {
+  const autoGrade = Boolean(editDynamicFieldsEl.querySelector(".essay-auto-grade")?.checked);
+  const settings = editDynamicFieldsEl.querySelector(".essay-key-settings");
+  if (settings) {
+    settings.classList.toggle("hidden", !autoGrade);
+  }
+  if (!autoGrade) {
+    return;
+  }
+
+  const mode = editDynamicFieldsEl.querySelector(".essay-key-mode")?.value || "auto";
+  const numericBox = editDynamicFieldsEl.querySelector(".essay-key-numeric-opts");
+  const textBox = editDynamicFieldsEl.querySelector(".essay-key-text-opts");
+  numericBox?.classList.toggle("hidden", mode !== "auto" && mode !== "numeric");
+  textBox?.classList.toggle("hidden", mode === "numeric");
+};
+
+/** Penguji langsung: guru mengetik contoh jawaban siswa, hasilnya muncul seketika. */
+const runEssayKeyTester = () => {
+  const input = editDynamicFieldsEl.querySelector(".essay-key-tester");
+  const output = editDynamicFieldsEl.querySelector(".essay-key-tester-result");
+  if (!input || !output) {
+    return;
+  }
+
+  const { autoGrade, answerKey } = readEssayKeyFromFields();
+  const sample = input.value;
+
+  if (!autoGrade || (answerKey?.accepted || []).length === 0) {
+    output.textContent = "Isi kunci jawaban dulu untuk mencoba.";
+    output.style.color = "var(--muted, #64748b)";
+    return;
+  }
+  if (!sample.trim()) {
+    const mode = answerKey.mode === "auto" ? inferMode(answerKey.accepted) : answerKey.mode;
+    output.textContent = `Mode terdeteksi: ${ESSAY_MODE_LABELS[mode] || mode}. Ketik contoh jawaban siswa di atas.`;
+    output.style.color = "var(--muted, #64748b)";
+    return;
+  }
+
+  const mode = answerKey.mode === "auto" ? inferMode(answerKey.accepted) : answerKey.mode;
+  const result = matchAnswer(answerKey, sample);
+  const described = describeAnswer(sample, mode === "keywords" ? "text" : mode);
+  const readAs = described.ok ? ` — dibaca sebagai ${described.readAs}` : "";
+
+  if (result.match) {
+    output.textContent = `✅ Benar${readAs}`;
+    output.style.color = "var(--success, #16a34a)";
+    return;
+  }
+  if (result.ratio > 0) {
+    output.textContent = `⚠️ Benar sebagian (${Math.round(result.ratio * 100)}%)${readAs}`;
+    output.style.color = "var(--warning, #d97706)";
+    return;
+  }
+
+  const reasons = {
+    unit: "satuannya tidak sesuai",
+    not_simplified: "pecahannya belum disederhanakan",
+    empty: "jawaban kosong",
+  };
+  const detail = reasons[result.reason]
+    || (result.unreadable ? "format tidak terbaca mesin" : "tidak cocok dengan kunci");
+  output.textContent = `❌ Salah — ${detail}${readAs}`;
+  output.style.color = "var(--danger, #dc2626)";
+};
+
+const buildEssayKeyFields = (data = null) => {
+  const key = data?.answerKey || {};
+  const accepted = Array.isArray(key.accepted) ? key.accepted.join("\n") : "";
+  const partial = key.partial?.[0];
+  const partialAccepted = Array.isArray(partial?.accepted) ? partial.accepted.join("\n") : "";
+  const partialRatio = partial?.ratio ? Math.round(partial.ratio * 100) : 50;
+  const autoGrade = Boolean(data?.autoGrade);
+  const checkedIf = (value) => (value ? "checked" : "");
+  const selectedIf = (value) => (value ? "selected" : "");
+
+  editDynamicFieldsEl.innerHTML = `
+    <label class="essay-auto-grade-toggle" style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+      <input type="checkbox" class="essay-auto-grade" ${checkedIf(autoGrade)} />
+      Periksa otomatis jawaban essay ini
+    </label>
+    <p class="field-hint">Tanpa ini, jawaban essay tetap menunggu koreksi manual guru seperti biasa.</p>
+
+    <div class="essay-key-settings ${autoGrade ? "" : "hidden"}" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;">
+      <label>
+        Mode pencocokan
+        <select class="essay-key-mode">
+          <option value="auto" ${selectedIf(!key.mode || key.mode === "auto")}>Otomatis (deteksi dari kunci)</option>
+          <option value="numeric" ${selectedIf(key.mode === "numeric")}>Angka / Matematika</option>
+          <option value="text" ${selectedIf(key.mode === "text")}>Teks</option>
+          <option value="keywords" ${selectedIf(key.mode === "keywords")}>Kata kunci (semua harus muncul)</option>
+        </select>
+      </label>
+
+      <label>
+        Kunci jawaban — satu per baris, semua dianggap benar
+        <textarea class="essay-key-accepted" rows="3" dir="auto" placeholder="3/4">${escapeHtml(accepted)}</textarea>
+      </label>
+      <p class="field-hint">Siswa boleh menjawab dalam bentuk apa pun yang senilai: <code>3/4</code>, <code>0,75</code>, <code>75%</code>, <code>¾</code>, atau <code>\\frac{3}{4}</code>.</p>
+
+      <div class="essay-key-numeric-opts" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;">
+        <label style="flex: 1 1 8rem;">
+          Toleransi selisih
+          <input type="number" class="essay-key-tolerance" min="0" step="any" value="${Number(key.tolerance) || 0}" />
+        </label>
+        <label style="flex: 1 1 8rem;">
+          Satuan wajib
+          <input type="text" class="essay-key-unit" value="${escapeHtml(key.requireUnit || "")}" placeholder="kosongkan = bebas" />
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.4rem; font-weight: normal; flex: 1 1 100%;">
+          <input type="checkbox" class="essay-key-simplified" ${checkedIf(key.requireSimplified)} />
+          Wajib bentuk paling sederhana (6/8 dianggap salah)
+        </label>
+      </div>
+
+      <div class="essay-key-text-opts" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;">
+        <label style="display: flex; align-items: center; gap: 0.4rem; font-weight: normal;">
+          <input type="checkbox" class="essay-key-ignore-case" ${checkedIf(key.ignoreCase !== false)} />
+          Abaikan huruf besar/kecil
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.4rem; font-weight: normal;">
+          <input type="checkbox" class="essay-key-ignore-punct" ${checkedIf(key.ignorePunctuation !== false)} />
+          Abaikan tanda baca
+        </label>
+        <label style="flex: 1 1 8rem;">
+          Toleransi salah ketik (huruf)
+          <input type="number" class="essay-key-typo" min="0" max="3" step="1" value="${Number(key.typoTolerance) || 0}" />
+        </label>
+      </div>
+
+      <details>
+        <summary style="cursor: pointer;">Jawaban setengah benar (opsional)</summary>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-top: 0.5rem;">
+          <label style="flex: 2 1 12rem;">
+            Jawaban yang dinilai sebagian — satu per baris
+            <textarea class="essay-key-partial" rows="2" dir="auto">${escapeHtml(partialAccepted)}</textarea>
+          </label>
+          <label style="flex: 1 1 6rem;">
+            Nilai (%)
+            <input type="number" class="essay-key-partial-ratio" min="0" max="100" step="1" value="${partialRatio}" />
+          </label>
+        </div>
+      </details>
+
+      <label>
+        Jika jawaban tidak cocok dengan kunci
+        <select class="essay-key-mismatch">
+          <option value="manual" ${selectedIf(data?.onMismatch !== "wrong")}>Kirim ke koreksi guru (disarankan)</option>
+          <option value="wrong" ${selectedIf(data?.onMismatch === "wrong")}>Langsung dianggap salah</option>
+        </select>
+      </label>
+
+      <div style="border-top: 1px dashed var(--border); padding-top: 0.75rem;">
+        <label>
+          Coba jawaban siswa
+          <input type="text" class="essay-key-tester" dir="auto" placeholder="ketik contoh jawaban, mis. 0,75" />
+        </label>
+        <p class="essay-key-tester-result field-hint" style="margin-top: 0.35rem; font-weight: 600;"></p>
+      </div>
+    </div>
+  `;
+
+  editDynamicFieldsEl.querySelector(".essay-auto-grade")?.addEventListener("change", () => {
+    syncEssayKeyVisibility();
+    runEssayKeyTester();
+  });
+  editDynamicFieldsEl.querySelector(".essay-key-mode")?.addEventListener("change", () => {
+    syncEssayKeyVisibility();
+    runEssayKeyTester();
+  });
+  // Penguji ikut menyegar setiap kunci/opsi diubah, bukan hanya saat mengetik contoh.
+  editDynamicFieldsEl.querySelector(".essay-key-settings")?.addEventListener("input", runEssayKeyTester);
+  editDynamicFieldsEl.querySelector(".essay-key-settings")?.addEventListener("change", runEssayKeyTester);
+
+  syncEssayKeyVisibility();
+  runEssayKeyTester();
+};
+
 const buildEditorDynamicFields = (type, data = null) => {
   editDynamicFieldsEl.innerHTML = "";
   editAddRowBtn.classList.remove("hidden");
@@ -1223,9 +1599,7 @@ const buildEditorDynamicFields = (type, data = null) => {
 
   if (type === "essay") {
     editAddRowBtn.classList.add("hidden");
-    editDynamicFieldsEl.innerHTML = `
-      <p class="field-hint">Soal Essay tidak memiliki opsi atau kunci pilihan. Siswa akan mengisinya secara bebas.</p>
-    `;
+    buildEssayKeyFields(data);
     return;
   }
 
@@ -1315,7 +1689,11 @@ const collectPayloadFromEditorFields = (type) => {
   }
 
   if (type === "essay") {
-    return {};
+    const essayKey = readEssayKeyFromFields();
+    if (essayKey.autoGrade && (essayKey.answerKey?.accepted || []).length === 0) {
+      throw new Error("Pemeriksaan otomatis aktif, jadi kunci jawaban essay wajib diisi minimal satu baris.");
+    }
+    return essayKey;
   }
 
   if (type === "match") {
@@ -1396,7 +1774,7 @@ const collectPayloadForPreview = (type) => {
   }
 
   if (type === "essay") {
-    return {};
+    return readEssayKeyFromFields();
   }
 
   if (type === "match") {
@@ -1458,6 +1836,10 @@ const getCorrectAnswersAsCurrentAnswer = (type, payload) => {
     });
     return answers;
   }
+  if (type === "essay") {
+    // Tampilkan kunci pertama di kotak jawaban pratinjau.
+    return (payload.answerKey?.accepted || [])[0] || "";
+  }
   return "";
 };
 
@@ -1490,12 +1872,35 @@ const updateEditFormPreview = () => {
   // 2. Gather active inputs for the options/statements/pairs
   const payload = collectPayloadForPreview(type);
 
+  // Get passage content if any
+  const passageId = document.querySelector("#edit-q-passage")?.value || "";
+  let passageTitle = "";
+  let passageContent = "";
+  if (passageId) {
+    const passage = editorPassages.find(p => p.id === passageId);
+    if (passage) {
+      passageTitle = passage.title;
+      // Resolve image placeholders in passage content for preview
+      const pDiv = document.createElement("div");
+      pDiv.innerHTML = passage.content;
+      pDiv.querySelectorAll("img").forEach((img) => {
+        const src = img.getAttribute("src") || "";
+        if (editorTempImages[src]) {
+          img.setAttribute("src", editorTempImages[src]);
+        }
+      });
+      passageContent = pDiv.innerHTML;
+    }
+  }
+
   // 3. Assemble the mock question
   const tempQuestion = {
     id: "preview_q",
     type: type,
     content: resolvedContent,
     scoreWeight: scoreWeight,
+    passageTitle,
+    passageContent,
     ...payload
   };
 
@@ -1541,6 +1946,11 @@ const selectEditorQuestion = (idx) => {
   document.querySelector("#edit-q-type").value = q.type;
   document.querySelector("#edit-q-content").value = q.content;
   document.querySelector("#edit-q-score").value = q.scoreWeight || 10;
+  
+  const passageEl = document.querySelector("#edit-q-passage");
+  if (passageEl) {
+    passageEl.value = q.passageId || "";
+  }
   
   if (window.editQuill) {
     // Resolve memory placeholders to base64 so they render nicely inside the editor as well!
@@ -1655,6 +2065,18 @@ const renderEditorList = () => {
     const isSelected = selectedEditorQIndex === idx;
     const activeClass = isSelected ? "active" : "";
 
+    let passageBadge = "";
+    if (q.passageId) {
+      const p = editorPassages.find(pass => pass.id === q.passageId);
+      if (p) {
+        passageBadge = `
+          <span class="badge" style="background: #e0f2fe; color: #0369a1; font-size: 0.7rem; font-weight: 700; margin-left: 0.25rem; padding: 0.05rem 0.35rem; border-radius: 4px;" title="${escapeHtml(p.content.replace(/<[^>]*>/g, '').substring(0, 100))}">
+            📖 ${escapeHtml(p.title)}
+          </span>
+        `;
+      }
+    }
+
     return `
       <div class="mini-q-card ${activeClass}" data-index="${idx}" id="mini-q-card-${idx}">
         <div class="mini-q-card-header">
@@ -1663,6 +2085,7 @@ const renderEditorList = () => {
             <span class="badge" style="background: var(--brand-light); color: var(--brand); font-size: 0.7rem; font-weight: 700; margin-left: 0.25rem; padding: 0.05rem 0.35rem; border-radius: 4px;">
               ${q.type.toUpperCase()}
             </span>
+            ${passageBadge}
           </div>
           <small class="muted" style="font-size: 0.75rem;">Skor: ${q.scoreWeight || 100}</small>
         </div>
@@ -1743,6 +2166,7 @@ const printExamPDF = async (examId) => {
     }
 
     const { exam, questions } = loaded;
+    const enableWorkspace = exam.enableWorkspaceColumn !== false;
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -1953,8 +2377,8 @@ const printExamPDF = async (examId) => {
     }
     
     .question-left {
-      width: 50%;
-      border-right: 1.5px solid #0f172a;
+      width: ${enableWorkspace ? '50%' : '100%'};
+      border-right: ${enableWorkspace ? '1.5px solid #0f172a' : 'none'};
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -1964,6 +2388,7 @@ const printExamPDF = async (examId) => {
       width: 50%;
       background: #fff;
       min-height: 160px;
+      display: ${enableWorkspace ? 'block' : 'none'};
     }
     
     .question-badge {
@@ -2187,6 +2612,8 @@ const printExamPDF = async (examId) => {
     <div class="questions-container" style="display: flex; flex-direction: column; gap: 10px;">
 `;
 
+    let lastPassageId = null;
+
     questions.forEach((q, idx) => {
       let badgeText = "";
       switch (q.type) {
@@ -2211,7 +2638,7 @@ const printExamPDF = async (examId) => {
               <div class="print-option-item">
                 <span class="option-indicator ${indicatorClass}"></span>
                 <span class="option-letter">${String.fromCharCode(65 + oIdx)}.</span>
-                <span class="option-text" dir="auto">${opt.text}</span>
+                <span class="option-text" dir="auto">${escapeHtml(opt.text)}</span>
               </div>
             `).join("")}
           </div>
@@ -2229,7 +2656,7 @@ const printExamPDF = async (examId) => {
             <tbody>
               ${(q.statements || []).map(stmt => `
                 <tr>
-                  <td dir="auto">${stmt.text}</td>
+                  <td dir="auto">${escapeHtml(stmt.text)}</td>
                   <td class="center"><span class="matrix-box"></span></td>
                   <td class="center"><span class="matrix-box"></span></td>
                 </tr>
@@ -2253,7 +2680,7 @@ const printExamPDF = async (examId) => {
               ${leftPairs.map((pair, pIdx) => `
                 <div class="print-match-item" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;">
                   <span dir="auto" style="flex: 1; line-height: 1.4;">
-                    <strong>${pIdx + 1}.</strong> ${pair.left}
+                    <strong>${pIdx + 1}.</strong> ${escapeHtml(pair.left)}
                   </span>
                   <span style="white-space: nowrap; flex-shrink: 0;">
                     ( &nbsp;<span class="match-slot" style="display: inline-block; border-bottom: 1.5px solid #000; width: 35px; height: 15px; margin: 0 4px; vertical-align: middle;"></span>&nbsp; )
@@ -2268,7 +2695,7 @@ const printExamPDF = async (examId) => {
                 ${shuffledRight.map((rText, rIdx) => `
                   <div dir="auto" style="display: flex; align-items: flex-start; gap: 4px; line-height: 1.4;">
                     <strong style="color: #334155; flex-shrink: 0;">${String.fromCharCode(65 + rIdx)}.</strong>
-                    <span style="flex: 1;">${rText}</span>
+                    <span style="flex: 1;">${escapeHtml(rText)}</span>
                   </div>
                 `).join("")}
               </div>
@@ -2277,6 +2704,23 @@ const printExamPDF = async (examId) => {
         `;
       }
       
+      if (q.passageId && q.passageId !== lastPassageId) {
+        const passage = (exam.passages || []).find(p => p.id === q.passageId);
+        if (passage) {
+          html += `
+            <div class="print-passage-block" style="width: 100%; border: 1.5px solid #0f172a; border-radius: 6px; padding: 12px; margin-top: 10px; margin-bottom: 10px; background: #f8fafc; box-sizing: border-box; page-break-inside: avoid; break-inside: avoid;">
+              <div style="font-weight: 700; font-family: 'Outfit', sans-serif; font-size: 13px; border-bottom: 1px dashed #0f172a; padding-bottom: 4px; margin-bottom: 8px; text-transform: uppercase; color: #0f172a;">
+                ${escapeHtml(passage.title)}
+              </div>
+              <div style="font-size: 11.5px; line-height: 1.5;" dir="auto">${passage.content}</div>
+            </div>
+          `;
+        }
+        lastPassageId = q.passageId;
+      } else if (!q.passageId) {
+        lastPassageId = null;
+      }
+
       html += `
     <div class="question-row">
       <div class="question-cell question-left">
@@ -2289,7 +2733,7 @@ const printExamPDF = async (examId) => {
         </div>
         ${qBodyHtml}
       </div>
-      <div class="question-cell question-right"></div>
+      ${enableWorkspace ? '<div class="question-cell question-right"></div>' : ''}
     </div>
       `;
     });
@@ -2341,7 +2785,7 @@ const printExamPDF = async (examId) => {
         const dividerEl = document.querySelector('.header-divider');
         const headerHeight = (headerEl ? headerEl.offsetHeight : 0) + (dividerEl ? dividerEl.offsetHeight : 0) + 30;
         
-        const rows = Array.from(document.querySelectorAll('.question-row'));
+        const rows = Array.from(document.querySelectorAll('.print-passage-block, .question-row'));
         if (rows.length === 0) {
           triggerPrint();
           return;
@@ -2434,7 +2878,20 @@ const downloadDocxFromEditor = async () => {
   }
 
   feedbackEl.textContent = "Memulai ekspor Word...";
-  await exportQuestionsToDocx(editorQuestions, `bank-soal-editor-${Date.now()}.docx`, editorTempImages, feedbackEl);
+  const mappedQuestions = editorQuestions.map(q => {
+    if (q.passageId) {
+      const p = editorPassages.find(pass => pass.id === q.passageId);
+      if (p) {
+        return {
+          ...q,
+          passageTitle: p.title,
+          passageContent: p.content
+        };
+      }
+    }
+    return q;
+  });
+  await exportQuestionsToDocx(mappedQuestions, `bank-soal-editor-${Date.now()}.docx`, editorTempImages, feedbackEl);
 };
 
 const downloadBlankTemplate = async () => {
@@ -2492,6 +2949,52 @@ const downloadBlankTemplate = async () => {
         { left: "Jepang", right: "Tokyo" },
         { left: "Prancis", right: "Paris" }
       ]
+    },
+    {
+      type: "pg",
+      content: "<p>Siapakah penyair dari puisi tersebut?</p>",
+      scoreWeight: 10,
+      passageId: "p_dummy_1",
+      passageTitle: "Wacana Sastra",
+      passageContent: "<p>Bacalah kutipan puisi di bawah ini untuk menjawab soal nomor 7 dan 8.</p><p>Hujan bulan Juni...</p>",
+      options: [
+        { id: "opt_a", text: "Sapardi Djoko Damono", isCorrect: true },
+        { id: "opt_b", text: "Chairil Anwar", isCorrect: false },
+        { id: "opt_c", text: "WS Rendra", isCorrect: false }
+      ]
+    },
+    {
+      type: "essay",
+      content: "<p>Jelaskan tema utama dari kutipan puisi di atas.</p>",
+      scoreWeight: 30,
+      passageId: "p_dummy_1",
+      passageTitle: "Wacana Sastra",
+      passageContent: "<p>Bacalah kutipan puisi di bawah ini untuk menjawab soal nomor 7 dan 8.</p><p>Hujan bulan Juni...</p>",
+    },
+    {
+      type: "pg",
+      content: "<p>Soal ini berada di luar wacana/grup soal (mandiri).</p>",
+      scoreWeight: 10,
+      options: [
+        { id: "opt_a", text: "Sapardi Djoko Damono adalah penyair terkenal.", isCorrect: true },
+        { id: "opt_b", text: "Chairil Anwar adalah penyair Angkatan 45.", isCorrect: false }
+      ]
+    },
+    {
+      type: "essay",
+      content: "<p>Sebuah pita sepanjang 1 meter dipotong menjadi 4 bagian sama panjang. Berapa meter panjang setiap potongan?</p>",
+      scoreWeight: 10,
+      autoGrade: true,
+      onMismatch: "manual",
+      answerKey: { mode: "numeric", accepted: ["1/4"] }
+    },
+    {
+      type: "essay",
+      content: "<p>Siapakah presiden pertama Republik Indonesia?</p>",
+      scoreWeight: 10,
+      autoGrade: true,
+      onMismatch: "manual",
+      answerKey: { mode: "text", accepted: ["Soekarno", "Sukarno", "Ir. Soekarno"] }
     }
   ];
 
@@ -2568,40 +3071,36 @@ const saveEditorQuestionsToFirestore = async () => {
         type: q.type,
         content: cleanContent,
         scoreWeight: q.scoreWeight || 100,
+        passageId: q.passageId || "",
       };
 
-      const keyPayload = {
-        type: q.type,
-      };
+      // Kunci selalu masuk dokumen terpisah (exam_keys), tidak pernah ke soal
+      // publik — termasuk kunci essay auto-grade.
+      const keyPayload = buildKeyPayload(q);
 
       if (q.type === "pg" || q.type === "pgk" || q.type === "tf") {
         publicPayload.options = (q.options || []).map(opt => ({
           id: opt.id,
           text: opt.text
         }));
-        keyPayload.correctOptionIds = (q.options || [])
-          .filter(opt => opt.isCorrect)
-          .map(opt => opt.id);
       } else if (q.type === "tf_matrix") {
         publicPayload.statements = (q.statements || []).map(stmt => ({
           id: stmt.id,
           text: stmt.text
         }));
-        keyPayload.correctStatements = {};
-        (q.statements || []).forEach(stmt => {
-          keyPayload.correctStatements[stmt.id] = String(stmt.isCorrect);
-        });
+      } else if (q.type === "essay") {
+        // Petunjuk format saja, bukan kunci. Selalu ditulis (walau kosong) agar
+        // soal yang tadinya angka lalu diubah tidak menyisakan nilai lama.
+        publicPayload.answerFormat = publicAnswerFormat(q);
       } else if (q.type === "match") {
         const lefts = (q.matchPairs || []).map(p => p.left);
         const rights = (q.matchPairs || []).map(p => p.right);
-        
+
         const shuffledRights = shuffleArray(rights);
         publicPayload.matchPairs = lefts.map((left, idx) => ({
           left: left,
           right: shuffledRights[idx]
         }));
-        
-        keyPayload.matchPairs = q.matchPairs || [];
       }
 
       let questionId = q.id;
@@ -2615,8 +3114,47 @@ const saveEditorQuestionsToFirestore = async () => {
       finalQuestionIds.push(questionId);
     }
 
+    // Process passage images: resolve placeholders → upload to Storage → replace with URLs
+    const processedPassages = [];
+    for (let pi = 0; pi < editorPassages.length; pi++) {
+      const passage = { ...editorPassages[pi] };
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = passage.content;
+
+      const images = tempDiv.querySelectorAll("img");
+      let imgIndex = 0;
+      for (const img of images) {
+        let src = img.getAttribute("src") || "";
+        if (editorTempImages[src]) {
+          src = editorTempImages[src];
+        }
+        if (src.startsWith("data:image")) {
+          try {
+            const blob = dataURItoBlob(src);
+            const fileExtension = blob.type.split("/")[1] || "png";
+            const fileName = `exams/images/passage_${Date.now()}_${pi}_${imgIndex}.${fileExtension}`;
+
+            const storageRef = ref(storage, fileName);
+            await uploadBytes(storageRef, blob);
+            const downloadURL = await getDownloadURL(storageRef);
+
+            img.setAttribute("src", downloadURL);
+            img.setAttribute("style", "max-width: 100%; height: auto; display: block; margin: 0.5rem 0; border-radius: 4px;");
+            imgIndex++;
+          } catch (imgErr) {
+            console.error("Gagal upload gambar passage saat simpan:", imgErr);
+          }
+        }
+      }
+      passage.content = tempDiv.innerHTML;
+      processedPassages.push(passage);
+    }
+
     await saveExamKeys(targetExamId, { keys: keysMap });
     await updateExamQuestionList(targetExamId, finalQuestionIds);
+    await updateExamDetails(targetExamId, {
+      passages: processedPassages,
+    });
 
     feedbackEl.textContent = `Sukses menyimpan ${finalQuestionIds.length} soal langsung ke ujian tujuan.`;
     alert(`Sukses menyimpan ${finalQuestionIds.length} soal langsung ke ujian!`);
@@ -2627,13 +3165,191 @@ const saveEditorQuestionsToFirestore = async () => {
   }
 };
 
+const populatePassageDropdown = () => {
+  const dropdown = document.querySelector("#edit-q-passage");
+  if (!dropdown) return;
+  
+  const currentVal = dropdown.value;
+  
+  dropdown.innerHTML = `<option value="">Tanpa Grup (Soal Mandiri)</option>` +
+    editorPassages.map(p => `<option value="${p.id}">${escapeHtml(p.title)}</option>`).join("");
+    
+  if (editorPassages.some(p => p.id === currentVal)) {
+    dropdown.value = currentVal;
+  } else {
+    dropdown.value = "";
+  }
+};
+
+const resetPassageForm = () => {
+  const editIdEl = document.querySelector("#passage-edit-id");
+  const titleEl = document.querySelector("#passage-title");
+  const contentEl = document.querySelector("#passage-content");
+  const formTitleEl = document.querySelector("#passage-form-title");
+  
+  if (editIdEl) editIdEl.value = "";
+  if (titleEl) titleEl.value = "";
+  if (contentEl) contentEl.value = "";
+  if (formTitleEl) formTitleEl.textContent = "Tambah Grup Soal Baru";
+  if (window.passageQuill) {
+    window.passageQuill.setContents([]);
+  }
+};
+
+const renderPassagesList = () => {
+  const container = document.querySelector("#passages-list-container");
+  const countEl = document.querySelector("#passages-count");
+  if (!container || !countEl) return;
+  
+  countEl.textContent = editorPassages.length;
+  
+  if (editorPassages.length === 0) {
+    container.innerHTML = `<div class="muted" style="text-align: center; padding: 2rem 0; font-size: 0.9rem; font-style: italic;">Belum ada grup soal. Tulis teks baru di form sebelah kanan.</div>`;
+    return;
+  }
+  
+  container.innerHTML = editorPassages.map((p, idx) => `
+    <div class="card" style="padding: 0.75rem; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.5rem; background: #f8fafc; margin-bottom: 0.5rem; border-radius: 8px; box-shadow: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <strong style="font-size: 0.9rem; color: #1e293b;">${escapeHtml(p.title)}</strong>
+        <div style="display: flex; gap: 0.25rem;">
+          <button type="button" class="secondary mini passage-edit-btn" data-id="${p.id}" style="padding: 0.2rem 0.4rem; font-size: 0.75rem; border-radius: 4px; height: auto;">✏️</button>
+          <button type="button" class="danger mini passage-delete-btn" data-id="${p.id}" style="padding: 0.2rem 0.4rem; font-size: 0.75rem; border-radius: 4px; height: auto; border: none; background: #fee2e2; color: #ef4444;">🗑️</button>
+        </div>
+      </div>
+      <div class="muted" style="font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+        ${escapeHtml(p.content.replace(/<[^>]*>/g, '').substring(0, 80))}...
+      </div>
+    </div>
+  `).join("");
+  
+  // Bind listeners
+  container.querySelectorAll(".passage-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.id;
+      const p = editorPassages.find(x => x.id === id);
+      if (p) {
+        document.querySelector("#passage-edit-id").value = p.id;
+        document.querySelector("#passage-title").value = p.title;
+        document.querySelector("#passage-content").value = p.content;
+        document.querySelector("#passage-form-title").textContent = "Edit Grup Soal / Wacana";
+        // Load content into passage Quill editor with resolved images
+        if (window.passageQuill) {
+          const tempDiv = document.createElement("div");
+          tempDiv.innerHTML = p.content;
+          const imgs = tempDiv.querySelectorAll("img");
+          imgs.forEach((img) => {
+            const src = img.getAttribute("src") || "";
+            if (editorTempImages[src]) {
+              img.setAttribute("src", editorTempImages[src]);
+            }
+          });
+          window.passageQuill.clipboard.dangerouslyPasteHTML(tempDiv.innerHTML);
+        }
+      }
+    });
+  });
+  
+  container.querySelectorAll(".passage-delete-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.id;
+      const p = editorPassages.find(x => x.id === id);
+      if (!p) return;
+      
+      const qCount = editorQuestions.filter(q => q.passageId === id).length;
+      let warning = `Apakah Anda yakin ingin menghapus "${p.title}"?`;
+      if (qCount > 0) {
+        warning = `Peringatan: Ada ${qCount} soal yang terhubung ke grup "${p.title}". Jika dihapus, soal-soal tersebut akan menjadi soal mandiri (tanpa grup). Apakah Anda yakin?`;
+      }
+      
+      if (window.confirm(warning)) {
+        editorPassages = editorPassages.filter(x => x.id !== id);
+        editorQuestions.forEach(q => {
+          if (q.passageId === id) {
+            q.passageId = "";
+          }
+        });
+        
+        if (document.querySelector("#passage-edit-id").value === id) {
+          resetPassageForm();
+        }
+        
+        renderPassagesList();
+        populatePassageDropdown();
+        renderEditorList();
+      }
+    });
+  });
+};
+
 const initQuestionEditor = () => {
   // Initialize Quill Rich Text Editor
   initQuillEditor();
+  initPassageQuillEditor();
+
+  // Passage Management UI event listeners
+  document.querySelector("#edit-manage-passages-btn")?.addEventListener("click", () => {
+    const modal = document.querySelector("#manage-passages-modal");
+    if (modal) {
+      resetPassageForm();
+      renderPassagesList();
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+    }
+  });
+
+  document.querySelector("#close-manage-passages-btn")?.addEventListener("click", () => {
+    const modal = document.querySelector("#manage-passages-modal");
+    if (modal) {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+    }
+  });
+
+  document.querySelector("#passage-cancel-btn")?.addEventListener("click", () => {
+    resetPassageForm();
+  });
+
+  document.querySelector("#passage-save-btn")?.addEventListener("click", () => {
+    const id = document.querySelector("#passage-edit-id").value;
+    const title = document.querySelector("#passage-title").value.trim();
+    // Get content from Quill editor (with placeholders for base64 images)
+    let content = "";
+    if (window.passageQuill) {
+      const rawHtml = window.passageQuill.root.innerHTML;
+      content = extractBase64ImagesToPlaceholders(rawHtml).trim();
+    } else {
+      content = document.querySelector("#passage-content").value.trim();
+    }
+    
+    if (!title) {
+      alert("Judul wacana/grup tidak boleh kosong.");
+      return;
+    }
+    if (!content) {
+      alert("Isi wacana tidak boleh kosong.");
+      return;
+    }
+    
+    if (id) {
+      const idx = editorPassages.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        editorPassages[idx] = { id, title, content };
+      }
+    } else {
+      const newId = `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      editorPassages.push({ id: newId, title, content });
+    }
+    
+    resetPassageForm();
+    renderPassagesList();
+    populatePassageDropdown();
+  });
 
   // Live Preview Event Listener
   document.querySelector("#edit-q-content")?.addEventListener("input", updateEditFormPreview);
   document.querySelector("#edit-q-score")?.addEventListener("input", updateEditFormPreview);
+  document.querySelector("#edit-q-passage")?.addEventListener("change", updateEditFormPreview);
   
   // Delegate change/input listeners from the dynamic fields element so any change triggers real-time preview
   const editDynamicFieldsEl = document.querySelector("#edit-dynamic-fields");
@@ -2642,7 +3358,7 @@ const initQuestionEditor = () => {
     editDynamicFieldsEl.addEventListener("change", updateEditFormPreview);
   }
 
-  // Insert Image Event Listeners
+  // Insert Image Event Listeners (Question Editor)
   document.querySelector("#edit-insert-img-btn")?.addEventListener("click", () => {
     document.querySelector("#edit-image-file-input")?.click();
   });
@@ -2682,6 +3398,38 @@ const initQuestionEditor = () => {
     reader.readAsDataURL(file);
   });
 
+  // Insert Image Event Listeners (Passage Editor)
+  document.querySelector("#passage-insert-img-btn")?.addEventListener("click", () => {
+    document.querySelector("#passage-image-file-input")?.click();
+  });
+
+  document.querySelector("#passage-image-file-input")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Src = event.target.result;
+
+      if (window.passageQuill) {
+        const range = window.passageQuill.getSelection();
+        const index = range ? range.index : window.passageQuill.getLength();
+        window.passageQuill.insertEmbed(index, "image", base64Src);
+        window.passageQuill.focus();
+      } else {
+        const textarea = document.querySelector("#passage-content");
+        if (!textarea) return;
+        const placeholderId = `temp_img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        editorTempImages[placeholderId] = base64Src;
+        const imgHtml = `\n<img src="${placeholderId}" style="max-width: 100%; height: auto; display: block; margin: 0.5rem 0; border-radius: 4px;" />\n`;
+        textarea.value += imgHtml;
+      }
+
+      e.target.value = ""; // Reset file input
+    };
+    reader.readAsDataURL(file);
+  });
+
   // Source 1: Muat dari Ujian
   document.querySelector("#editor-load-exam-btn")?.addEventListener("click", async () => {
     const examId = document.querySelector("#editor-load-exam").value;
@@ -2700,39 +3448,23 @@ const initQuestionEditor = () => {
       const keysData = await getExamKeys(examId);
       const keysMap = keysData?.keys || {};
 
+      editorPassages = loaded.exam.passages || [];
+      populatePassageDropdown();
+
       const { questions } = loaded;
-      editorQuestions = questions.map((q) => {
-        const key = keysMap[q.id];
-        let options = q.options || [];
-        let statements = q.statements || [];
-        let matchPairs = q.matchPairs || [];
-
-        if (key) {
-          if (q.type === "pg" || q.type === "tf" || q.type === "pgk") {
-            options = options.map(opt => ({
-              ...opt,
-              isCorrect: (key.correctOptionIds || []).includes(opt.id)
-            }));
-          } else if (q.type === "tf_matrix") {
-            statements = statements.map(stmt => ({
-              ...stmt,
-              isCorrect: key.correctStatements?.[stmt.id] || "false"
-            }));
-          } else if (q.type === "match") {
-            matchPairs = key.matchPairs || [];
-          }
-        }
-
-        return {
-          id: q.id,
-          type: q.type,
-          content: q.content,
-          scoreWeight: q.scoreWeight || 100,
-          options,
-          statements,
-          matchPairs
-        };
-      });
+      editorQuestions = mergeQuestionsWithKeys(questions, keysMap).map((q) => ({
+        id: q.id,
+        type: q.type,
+        content: q.content,
+        scoreWeight: q.scoreWeight || 100,
+        passageId: q.passageId || "",
+        options: q.options || [],
+        statements: q.statements || [],
+        matchPairs: q.matchPairs || [],
+        autoGrade: Boolean(q.autoGrade),
+        answerKey: q.answerKey || null,
+        onMismatch: q.onMismatch || "manual"
+      }));
 
       selectedEditorQIndex = null;
       feedbackEl.textContent = `Berhasil memuat ${editorQuestions.length} soal ke editor.`;
@@ -2763,7 +3495,7 @@ const initQuestionEditor = () => {
         const html = result.value;
 
         feedbackEl.textContent = "Memproses struktur soal...";
-        const parsedQuestions = parseImportedHtml(html);
+        const { questions: parsedQuestions, passages: parsedPassages } = parseImportedHtml(html);
 
         if (parsedQuestions.length === 0) {
           throw new Error("Tidak ada soal yang berhasil dibaca. Pastikan format template sesuai.");
@@ -2774,12 +3506,23 @@ const initQuestionEditor = () => {
           type: q.type,
           content: extractBase64ImagesToPlaceholders(q.content),
           scoreWeight: q.scoreWeight || 100,
+          passageId: q.passageId || "",
           options: q.options || [],
           statements: q.statements || [],
-          matchPairs: q.matchPairs || []
+          matchPairs: q.matchPairs || [],
+          // Kunci essay auto-grade ikut terbawa ke editor bila ditulis di dokumen.
+          ...(q.type === "essay"
+            ? {
+                autoGrade: Boolean(q.autoGrade),
+                answerKey: q.answerKey || null,
+                onMismatch: q.onMismatch || "manual",
+              }
+            : {}),
         }));
 
         editorQuestions = mapped;
+        editorPassages = parsedPassages || [];
+        populatePassageDropdown();
         selectedEditorQIndex = null;
         feedbackEl.textContent = `Berhasil mengimpor ${editorQuestions.length} soal ke editor.`;
         document.querySelector("#editor-workspace").classList.remove("hidden");
@@ -2827,12 +3570,14 @@ const initQuestionEditor = () => {
     
     try {
       const payload = collectPayloadFromEditorFields(type);
+      const passageId = document.querySelector("#edit-q-passage")?.value || "";
       
       editorQuestions[selectedEditorQIndex] = {
         ...editorQuestions[selectedEditorQIndex],
         type,
         content,
         scoreWeight,
+        passageId,
         ...payload
       };
       
@@ -2851,6 +3596,7 @@ const initQuestionEditor = () => {
       type: "pg",
       content: "<p>Teks soal baru...</p>",
       scoreWeight: 10,
+      passageId: "",
       options: [
         { id: "opt_1", text: "Pilihan A", isCorrect: true },
         { id: "opt_2", text: "Pilihan B", isCorrect: false }
@@ -2869,7 +3615,9 @@ const initQuestionEditor = () => {
     if (!ok) return;
     
     editorQuestions = [];
+    editorPassages = [];
     selectedEditorQIndex = null;
+    populatePassageDropdown();
     renderEditorList();
     document.querySelector("#editor-workspace").classList.add("hidden");
   });
@@ -2937,6 +3685,14 @@ const bootstrap = async () => {
     });
 
     await renderExams();
+
+    // Setup Search & Filter event listeners for Exam list
+    document.querySelector("#exam-search-input")?.addEventListener("input", () => {
+      filterAndRenderExams();
+    });
+    document.querySelector("#exam-status-filter")?.addEventListener("change", () => {
+      filterAndRenderExams();
+    });
     initRealTimeMonitoring({ userProfileCache, userProfileInFlight, getExamsCache: () => examsCache });
     initRealTimeRecap({ userProfileCache, userProfileInFlight, getExamsCache: () => examsCache, feedbackEl });
     initQuestionEditor();

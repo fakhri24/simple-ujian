@@ -55,7 +55,7 @@ Contoh struktur data standar yang harus kamu dukung:
 - Buat sebuah modul JS (`questionRenderer.js`) yang menerima objek JSON soal dan merender HTML yang sesuai.
 - **PG & TF:** Render menggunakan input `<input type="radio">`.
 - **PGK:** Render menggunakan input `<input type="checkbox">`.
-- **Essay:** Render menggunakan `<textarea>`.
+- **Essay:** Render menggunakan `<textarea>`. Untuk soal ber-`answerFormat: "numeric"`, tambahkan penulis pecahan dan pratinjau "terbaca sebagai" agar siswa tahu tulisannya sudah terbaca mesin.
 - **Menjodohkan (Match):** Menggunakan UI drag-and-drop HTML5 dengan fallback Click-to-Pair untuk keselarasan perangkat layar sentuh. Tampilkan deck kartu pilihan acak di sisi kanan dan area penampung slot di sisi kiri.
 - Buatkan satu soal per tampilan (next/prev).
 - Untuk soal menjodohkan buat acak setiap render.
@@ -71,7 +71,11 @@ Contoh struktur data standar yang harus kamu dukung:
 
 - Buat fungsi utilitas terpisah `calculateScore(userAnswers, correctKey)`.
 - Untuk PGK, gunakan logika scoring Parsial Berpenalti (Partial Scoring with Penalty). Nilai dihitung berdasarkan rasio jawaban benar dikurangi jawaban salah dibagi total kunci jawaban benar, dengan nilai minimal 0.
-- Untuk essai tidak auto menambah skor, tapi manual review.
+- Essay default-nya menunggu koreksi manual guru. Guru boleh menyalakan pemeriksaan otomatis per soal (`autoGrade` + `answerKey`); tanpa itu perilakunya tetap manual seperti semula.
+- Mesin pencocokannya ada di `js/answerMatcher.js` (modul murni: tanpa DOM/Firestore). Jawaban siswa dinormalisasi dulu, jadi semua bentuk yang senilai diterima: `3/4`, `0,75`, `75%`, `¾`, `\frac{3}{4}`, `x = 3/4`. Mode kunci: `numeric`, `text`, `keywords`, atau `auto` (ditebak dari bentuk kuncinya).
+- Saat jawaban tidak cocok, default `onMismatch` adalah `"manual"` — dilempar ke koreksi guru, bukan langsung disalahkan. Guru bisa memilih `"wrong"` per soal. Jangan ubah default ini.
+- Kunci essay tidak pernah masuk dokumen soal publik; semuanya lewat `exam_keys` (lihat `js/answerKeys.js`). Yang boleh ikut ke soal publik hanya petunjuk format `answerFormat` (`"numeric"`/`"text"`), dipakai layar siswa untuk menampilkan bantuan pecahan dan pratinjau "terbaca sebagai".
+- Impor/ekspor Word memakai baris `Kunci:`, `Alternatif:` (pisahkan dengan `;`), `Mode:`, `Toleransi:`, `Satuan:`, dan `Jika salah:` — lihat `js/essayKeyDocx.js`. Opsi lanjutan (wajib bentuk sederhana, toleransi salah ketik, jawaban setengah benar) hanya ada di editor dan tidak ikut ke file Word.
 
 # Coding Standards
 
