@@ -1,6 +1,7 @@
 import "dotenv/config";
 import fs from "node:fs";
-import admin from "firebase-admin";
+import { initializeApp, cert } from "firebase-admin";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 if (!serviceAccountPath) {
@@ -10,11 +11,11 @@ if (!serviceAccountPath) {
 const rawServiceAccount = fs.readFileSync(serviceAccountPath, "utf-8");
 const serviceAccount = JSON.parse(rawServiceAccount);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
 });
 
-const db = admin.firestore();
+const db = getFirestore();
 
 const clean = async () => {
   // 1. Clean exam_attempts
@@ -47,17 +48,19 @@ const clean = async () => {
     console.log("Koleksi submissions sudah kosong.");
   }
 
-  // 3. Reset login session for student to bypass concurrent session protection in tests
+  // 3. Reset login session for all users to bypass concurrent session protection in tests
   const usersRef = db.collection("users");
-  const studentEmail = process.env.SEED_STUDENT_EMAIL || "siswa@example.com";
-  const studentQuery = await usersRef.where("email", "==", studentEmail).get();
-  if (!studentQuery.empty) {
-    const studentDoc = studentQuery.docs[0];
-    await studentDoc.ref.update({
-      sessionId: admin.firestore.FieldValue.delete(),
-      lastActiveAt: admin.firestore.FieldValue.delete()
+  const usersSnap = await usersRef.get();
+  if (!usersSnap.empty) {
+    const batch = db.batch();
+    usersSnap.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        sessionId: FieldValue.delete(),
+        lastActiveAt: FieldValue.delete()
+      });
     });
-    console.log(`Berhasil me-reset sesi login untuk siswa ${studentEmail}.`);
+    await batch.commit();
+    console.log(`Berhasil me-reset sesi login untuk semua ${usersSnap.size} pengguna.`);
   }
 };
 
