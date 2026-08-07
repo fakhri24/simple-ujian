@@ -348,6 +348,46 @@ export const exportQuestionsToDocx = async (questions, filename, editorTempImage
       ],
     }),
     new Paragraph({
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Petunjuk Essay Diperiksa Otomatis:",
+          bold: true,
+          italics: true,
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Soal essay tanpa baris Kunci tetap menunggu koreksi guru seperti biasa. Tambahkan baris Kunci di bawah soal jika ingin jawabannya diperiksa otomatis.",
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Baris pelengkap yang bisa dipakai: Alternatif (jawaban lain yang juga benar, pisahkan dengan titik koma — bukan koma, karena koma dipakai sebagai tanda desimal), Mode (angka / teks / kata kunci), Toleransi (selisih yang masih diterima), Satuan (satuan yang wajib ditulis siswa), dan Jika salah (isi 'salah' agar jawaban tak cocok langsung dianggap salah; kosongkan agar dikirim ke koreksi guru).",
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Untuk kunci berupa angka, siswa boleh menjawab dalam bentuk apa pun yang senilai: 3/4, 0,75, 75%, atau $\\frac{3}{4}$ — semuanya dianggap benar.",
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Pengaturan lanjutan (wajib bentuk paling sederhana, toleransi salah ketik, jawaban setengah benar) hanya tersedia di editor soal dan tidak ikut tertulis di file Word ini.",
+        }),
+      ],
+    }),
+    new Paragraph({
       children: [new PageBreak()],
     }),
   ];
