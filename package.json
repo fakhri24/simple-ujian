@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "seed": "node scripts/seed-firestore.mjs"
+    "seed": "node scripts/seed-firestore.mjs",
+    "audit:question-ids": "node scripts/repair-question-ids.mjs",
+    "repair:question-ids": "node scripts/repair-question-ids.mjs --apply"
   },
   "dependencies": {
     "firebase": "^11.0.0",
