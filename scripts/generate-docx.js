@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { Document, Packer, Paragraph, HeadingLevel, ImageRun } from "docx";
+import { Document, Packer, Paragraph, HeadingLevel, ImageRun, Table, TableRow, TableCell, WidthType } from "docx";
 
 const doc = new Document({
   styles: {
@@ -45,6 +45,18 @@ const doc = new Document({
         }),
         new Paragraph({
           text: "Petunjuk Tipe & Bobot Soal: Tipe Pilihan Ganda (PG) adalah tipe standar, sehingga Anda TIDAK PERLU menuliskan baris Tipe di bawah teks soal PG. Bobot standar soal adalah 100, sehingga Anda TIDAK PERLU menuliskan baris Bobot jika nilainya 100. Untuk tipe selain PG (seperti Essay, Menjodohkan / Match, atau Matriks Benar/Salah / TF Matrix), atau jika bobot soal bukan 100, Anda wajib mencantumkan baris Tipe (contoh: Tipe: essay) atau Bobot (contoh: Bobot: 150) di bawah konten soal.",
+        }),
+        new Paragraph({
+          text: "",
+        }),
+        new Paragraph({
+          text: "Petunjuk Essay Diperiksa Otomatis: Soal essay biasa (tanpa baris Kunci) tetap menunggu koreksi guru. Jika Anda ingin jawabannya diperiksa otomatis, tambahkan baris Kunci di bawah soal, lalu lengkapi bila perlu dengan Alternatif (pisahkan dengan titik koma, bukan koma, karena koma dipakai untuk desimal), Mode (angka / teks / kata kunci), Toleransi, Satuan, dan Jika salah (isi 'salah' bila jawaban yang tidak cocok langsung dianggap salah; kosongkan agar dikirim ke koreksi guru). Untuk kunci berupa angka, siswa boleh menjawab dalam bentuk apa pun yang senilai: 3/4, 0,75, 75%, atau $\\frac{3}{4}$. Contohnya ada pada soal nomor 11 (angka) dan 12 (teks). Pengaturan lanjutan (wajib bentuk paling sederhana, toleransi salah ketik, jawaban setengah benar) hanya tersedia di editor soal, tidak ikut ditulis di file Word.",
+        }),
+        new Paragraph({
+          text: "",
+        }),
+        new Paragraph({
+          text: "Petunjuk Wacana / Grup Soal (Passage): Jika beberapa soal merujuk pada satu teks bacaan/wacana yang sama, gunakan penanda [GRUP SOAL: Judul Wacana] sebelum teks wacana. Tuliskan isi wacana di bawahnya, lalu tulis soal-soal yang terkait seperti biasa. Setelah soal terakhir dalam grup, tutup dengan penanda [TANPA GRUP SOAL] agar soal berikutnya tidak ikut tergabung dalam wacana tersebut. Contoh penggunaannya ada di bagian bawah template ini (lihat soal nomor 7-8 dan penutupnya).",
         }),
         new Paragraph({
           text: "",
@@ -105,6 +117,81 @@ const doc = new Document({
         new Paragraph({ text: "Pasangan: Indonesia = Jakarta" }),
         new Paragraph({ text: "Pasangan: Jepang = Tokyo" }),
         new Paragraph({ text: "Pasangan: Prancis = Paris" }),
+        new Paragraph({ text: "" }),
+
+        // Question 7 & 8: Passage
+        new Paragraph({ text: "[GRUP SOAL: Wacana Sastra]" }),
+        new Paragraph({ text: "Bacalah kutipan puisi di bawah ini untuk menjawab soal nomor 7 dan 8." }),
+        new Paragraph({ text: "Hujan bulan Juni..." }),
+        new Paragraph({ text: "" }),
+
+        new Paragraph({ text: "7. Siapakah penyair dari puisi tersebut?", heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "A. Sapardi Djoko Damono" }),
+        new Paragraph({ text: "B. Chairil Anwar" }),
+        new Paragraph({ text: "C. WS Rendra" }),
+        new Paragraph({ text: "Kunci: A" }),
+        new Paragraph({ text: "" }),
+
+        new Paragraph({ text: "8. Jelaskan tema utama dari kutipan puisi di atas.", heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "Tipe: essay" }),
+        new Paragraph({ text: "" }),
+
+        // End of Passage Group
+        new Paragraph({ text: "[TANPA GRUP SOAL]" }),
+        new Paragraph({ text: "" }),
+
+        // Standalone Question 9
+        new Paragraph({ text: "9. Soal ini berada di luar wacana/grup soal (mandiri).", heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "A. Sapardi Djoko Damono adalah penyair terkenal." }),
+        new Paragraph({ text: "B. Chairil Anwar adalah penyair Angkatan 45." }),
+        new Paragraph({ text: "Kunci: A" }),
+        new Paragraph({ text: "" }),
+
+        // Standalone Question 10 (Table sample)
+        new Paragraph({ text: "10. Perhatikan tabel data penjualan barang berikut:", heading: HeadingLevel.HEADING_2 }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ text: "Nama Barang" })] }),
+                new TableCell({ children: [new Paragraph({ text: "Penjualan (Unit)" })] }),
+              ]
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ text: "Pensil" })] }),
+                new TableCell({ children: [new Paragraph({ text: "150" })] }),
+              ]
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ text: "Buku" })] }),
+                new TableCell({ children: [new Paragraph({ text: "300" })] }),
+              ]
+            })
+          ]
+        }),
+        new Paragraph({ text: "" }),
+        new Paragraph({ text: "Berdasarkan tabel di atas, barang manakah yang paling banyak terjual?" }),
+        new Paragraph({ text: "A. Pensil" }),
+        new Paragraph({ text: "B. Buku" }),
+        new Paragraph({ text: "Kunci: B" }),
+        new Paragraph({ text: "" }),
+
+        // Question 11: Essay yang diperiksa otomatis
+        new Paragraph({ text: "11. Sebuah pita sepanjang 1 meter dipotong menjadi 4 bagian sama panjang. Berapa meter panjang setiap potongan?", heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "Tipe: essay" }),
+        new Paragraph({ text: "Kunci: 1/4" }),
+        new Paragraph({ text: "Mode: angka" }),
+        new Paragraph({ text: "" }),
+
+        // Question 12: Essay teks dengan beberapa jawaban yang diterima
+        new Paragraph({ text: "12. Siapakah presiden pertama Republik Indonesia?", heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "Tipe: essay" }),
+        new Paragraph({ text: "Kunci: Soekarno" }),
+        new Paragraph({ text: "Alternatif: Sukarno; Ir. Soekarno" }),
+        new Paragraph({ text: "Mode: teks" }),
       ],
     },
   ],

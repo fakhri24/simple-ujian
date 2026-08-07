@@ -1,7 +1,13 @@
 import { test, expect } from '@playwright/test';
+import { execSync } from 'child_process';
 
 test.describe('CBT Offline & Submit Edge Cases', () => {
+  test.beforeEach(() => {
+    execSync('node scripts/clean-test-db.mjs');
+  });
+
   test('reconciliation and recovery flows for offline submissions', async ({ page, context }) => {
+    test.setTimeout(90000);
     let offlineMode = false;
 
     // Log console and errors from browser context
@@ -40,9 +46,6 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
     // Guard baru mengunci tombol Selesai selama sisa waktu > 15 menit, jadi
     // test perlu melompati waktu agar bisa menguji alur submit. resume() segera
     // dipanggil agar waktu tetap mengalir normal (login Firebase tidak macet).
-    await page.clock.install();
-    await page.clock.resume();
-
     // 3. Log in as a student
     await page.goto('/');
     
@@ -55,8 +58,23 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
     await expect(page).toHaveURL(/\/pages\/student\.html/);
     await expect(page.locator('#student-welcome')).toContainText('Selamat datang');
 
-    // Find "ASAT MTL X 2026" exam item
-    const examItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+    // Find "ASAT MTL X 2026" exam item, paginating if needed
+    let examItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+    let pageCount = 0;
+    while (pageCount < 10) {
+      if (await examItem.isVisible()) {
+        break;
+      }
+      const nextBtn = page.locator('#next-page-btn');
+      if (await nextBtn.isVisible() && !(await nextBtn.isDisabled())) {
+        await nextBtn.click();
+        await page.waitForTimeout(300); // short wait for page render
+        examItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+        pageCount++;
+      } else {
+        break;
+      }
+    }
     await expect(examItem).toBeVisible();
 
     // Click starting button ("Mulai Ujian" or "Lanjutkan Ujian" or "Mulai Ulang Ujian")
@@ -75,9 +93,8 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
       console.log('Fullscreen overlay did not show or was auto-dismissed');
     }
 
-    // Now inside the exam. Answer some questions.
-    // Let's choose the first option in the current question
-    const option = page.locator('.q-option').first();
+    // Let's choose the first option/input in the current question (standard option, matrix label, match card, or essay text area)
+    const option = page.locator('.q-option, .matrix-label, .match-drag-card, #essay-answer').first();
     await expect(option).toBeVisible();
     await option.click();
 
@@ -105,6 +122,7 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
       if (parts.length === 2) return parts[0] * 60 + parts[1];
       return 0;
     });
+    await page.clock.install();
     if (remainingSeconds > 10 * 60) {
       await page.clock.fastForward((remainingSeconds - 10 * 60) * 1000);
     }

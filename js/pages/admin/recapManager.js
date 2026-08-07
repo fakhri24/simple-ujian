@@ -8,6 +8,8 @@ import {
 } from "../../db.js";
 import { renderQuestion } from "../../questionRenderer.js";
 import renderMathInElement from "katex/contrib/auto-render";
+import { mergeQuestionsWithKeys } from "../../answerKeys.js";
+import { calculateScore } from "../../scoring.js";
 
 let allSubmissions = [];
 let currentDetailSubmissionId = null;
@@ -28,6 +30,7 @@ let detailTotalScoreEl = null;
 let detailQuestionsContainer = null;
 let detailGradingActions = null;
 let saveGradingBtn = null;
+let regradeAutoBtn = null;
 let feedbackEl = null;
 
 // Shared references
@@ -379,33 +382,7 @@ const renderSubmissionDetail = async () => {
       const keysData = await getExamKeys(sub.examId);
       const keysMap = keysData?.keys || {};
 
-      questions = loaded.questions.map(q => {
-        const key = keysMap[q.id];
-        if (!key) return q;
-        if (q.type === "pg" || q.type === "tf" || q.type === "pgk") {
-          return {
-            ...q,
-            options: q.options.map(opt => ({
-              ...opt,
-              isCorrect: (key.correctOptionIds || []).includes(opt.id)
-            }))
-          };
-        } else if (q.type === "tf_matrix") {
-          return {
-            ...q,
-            statements: q.statements.map(stmt => ({
-              ...stmt,
-              isCorrect: key.correctStatements?.[stmt.id] || "false"
-            }))
-          };
-        } else if (q.type === "match") {
-          return {
-            ...q,
-            matchPairs: key.matchPairs || []
-          };
-        }
-        return q;
-      });
+      questions = mergeQuestionsWithKeys(loaded.questions, keysMap);
 
       currentDetailQuestions = questions;
       currentDetailQuestionsExamId = sub.examId;
@@ -452,12 +429,19 @@ const renderSubmissionDetail = async () => {
         qHeader.style.justifyContent = "space-between";
         qHeader.style.alignItems = "center";
 
+        // Jejak "🤖" membedakan nilai dari mesin dengan nilai dari guru.
+        const autoMark = bItem.autoGraded ? "🤖 " : "";
+
         let statusBadge = "";
         if (q.type === "essay") {
           if (bItem.status === "manual") {
             statusBadge = `<span class="badge badge-warning">📝 Perlu Diperiksa</span>`;
+          } else if (bItem.status === "wrong") {
+            statusBadge = `<span class="badge badge-danger">${autoMark}❌ Salah (${bItem.score}/${bItem.scoreWeight})</span>`;
+          } else if (bItem.status === "partial") {
+            statusBadge = `<span class="badge badge-warning">${autoMark}⚠️ Benar Sebagian (${bItem.score}/${bItem.scoreWeight})</span>`;
           } else {
-            statusBadge = `<span class="badge badge-success">✅ Dinilai (${bItem.score}/${bItem.scoreWeight})</span>`;
+            statusBadge = `<span class="badge badge-success">${autoMark}✅ Dinilai (${bItem.score}/${bItem.scoreWeight})</span>`;
           }
         } else if (bItem.status === "correct") {
           statusBadge = `<span class="badge badge-success">✅ Benar (${bItem.score}/${bItem.scoreWeight})</span>`;
@@ -515,8 +499,18 @@ const renderSubmissionDetail = async () => {
           keyInfo.style.background = "rgba(79, 70, 229, 0.05)";
           keyInfo.style.border = "1.5px solid rgba(79, 70, 229, 0.15)";
           
+          const acceptedKeys = q.answerKey?.accepted || [];
+          const keyLine = acceptedKeys.length > 0
+            ? `<div><strong>Kunci:</strong> ${acceptedKeys.join(" / ")}${q.autoGrade ? "" : " (pemeriksaan otomatis mati)"}</div>`
+            : "";
+          const readAsLine = bItem.readAs
+            ? `<div class="muted">Jawaban siswa dibaca mesin sebagai: <strong>${bItem.readAs}</strong></div>`
+            : "";
+
           keyInfo.innerHTML = `
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+              ${keyLine}
+              ${readAsLine}
               <strong style="color: var(--brand);">Koreksi Nilai Essay Guru:</strong>
               <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                 <span>Nilai Soal Ini:</span>
@@ -572,6 +566,70 @@ const renderSubmissionDetail = async () => {
   }
 };
 
+/**
+ * Hitung ulang seluruh soal memakai kunci terbaru — dipakai ketika guru
+ * memperbaiki kunci setelah siswa mengumpulkan. Nilai yang sudah dikoreksi
+ * guru dipertahankan bila mesin tetap tidak bisa membacanya.
+ */
+const regradeSubmissionAutomatically = async () => {
+  if (!currentDetailSubmissionId) return;
+
+  const sub = allSubmissions.find(s => s.id === currentDetailSubmissionId);
+  if (!sub) return;
+
+  if (currentDetailQuestions.length === 0) {
+    alert("Soal ujian belum termuat. Tutup lalu buka kembali detail ini.");
+    return;
+  }
+
+  const ok = window.confirm(
+    "Hitung ulang nilai siswa ini memakai kunci jawaban terbaru? Nilai yang sudah Anda koreksi manual tetap dipertahankan bila mesin tidak bisa membaca jawabannya."
+  );
+  if (!ok) return;
+
+  try {
+    if (regradeAutoBtn) {
+      regradeAutoBtn.disabled = true;
+      regradeAutoBtn.textContent = "Menghitung ulang...";
+    }
+
+    const oldBreakdown = sub.breakdown || [];
+    const fresh = calculateScore(currentDetailQuestions, sub.answersByQuestionId || {});
+
+    const newBreakdown = fresh.breakdown.map((item) => {
+      const previous = oldBreakdown.find((old) => old.questionId === item.questionId);
+      if (item.status === "manual" && previous?.status === "graded") {
+        return { ...previous };
+      }
+      return item;
+    });
+
+    const totalRawPoints = newBreakdown.reduce((sum, item) => sum + (item.score || 0), 0);
+    const totalMaxPoints = newBreakdown.reduce((sum, item) => sum + (item.scoreWeight || 10), 0);
+    let newTotal = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * 100 : 0;
+    newTotal = Math.min(100, Number(newTotal.toFixed(2)));
+
+    await updateSubmission(currentDetailSubmissionId, {
+      breakdown: newBreakdown,
+      totalScore: newTotal
+    });
+
+    const stillManual = newBreakdown.filter((item) => item.status === "manual").length;
+    if (feedbackEl) {
+      feedbackEl.textContent = `Nilai dihitung ulang. Sisa soal yang perlu koreksi manual: ${stillManual}.`;
+    }
+    alert(`Nilai berhasil dihitung ulang.\nSisa soal yang perlu koreksi manual: ${stillManual}.`);
+  } catch (err) {
+    console.error("Gagal menghitung ulang nilai:", err);
+    alert("Gagal menghitung ulang nilai: " + (err.message || err));
+  } finally {
+    if (regradeAutoBtn) {
+      regradeAutoBtn.disabled = false;
+      regradeAutoBtn.textContent = "🤖 Nilai Ulang Otomatis";
+    }
+  }
+};
+
 const saveManualGrading = async () => {
   if (!currentDetailSubmissionId) return;
 
@@ -599,7 +657,8 @@ const saveManualGrading = async () => {
         return {
           ...item,
           score: scoreValue,
-          status: "graded"
+          status: "graded",
+          autoGraded: false // nilai guru menimpa nilai mesin
         };
       }
       return { ...item };
@@ -673,6 +732,8 @@ export const initRealTimeRecap = (config) => {
   detailQuestionsContainer = document.querySelector("#detail-questions-container");
   detailGradingActions = document.querySelector("#detail-grading-actions");
   saveGradingBtn = document.querySelector("#save-grading-btn");
+  regradeAutoBtn = document.querySelector("#regrade-auto-btn");
+  regradeAutoBtn?.addEventListener("click", regradeSubmissionAutomatically);
 
   // Subscribe to real-time submissions streaming
   streamAllSubmissions(async (submissions) => {

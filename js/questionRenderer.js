@@ -1,4 +1,5 @@
 import renderMathInElement from "katex/contrib/auto-render";
+import { describeAnswer } from "./answerMatcher.js";
 
 const shuffle = (arr) => {
   const copy = [...arr];
@@ -9,7 +10,7 @@ const shuffle = (arr) => {
   return copy;
 };
 
-const escapeHtml = (str) => {
+export const escapeHtml = (str) => {
   if (typeof str !== 'string') return str;
   return str
     .replace(/&/g, "&amp;")
@@ -166,6 +167,43 @@ const renderTFMatrix = (question, selected, readOnly = false) => {
   `;
 };
 
+/** Tampilkan angka dengan koma desimal seperti kebiasaan menulis di Indonesia. */
+const toIdNumber = (text) => String(text || "").replace(".", ",");
+
+/**
+ * Essay biasa tetap satu kotak teks seperti sebelumnya. Soal yang kuncinya
+ * berupa angka (`answerFormat === "numeric"`) mendapat bantuan tambahan:
+ * penulis pecahan dan pratinjau "terbaca sebagai", supaya siswa tahu bentuk
+ * tulisannya sudah terbaca mesin sebelum ujian dikumpulkan.
+ */
+const renderEssay = (question, currentAnswer, readOnly) => {
+  const numeric = question.answerFormat === "numeric";
+  const placeholder = numeric ? "Tulis jawaban, mis. 3/4 atau 0,75" : "Tulis jawaban";
+  const textarea = `<textarea id="essay-answer" rows="${numeric ? 3 : 6}" placeholder="${placeholder}" dir="auto" ${readOnly ? "disabled" : ""}>${escapeHtml(currentAnswer || "")}</textarea>`;
+
+  if (!numeric || readOnly) {
+    return textarea;
+  }
+
+  return `
+    <div class="essay-numeric">
+      ${textarea}
+      <div class="essay-numeric-tools">
+        <button type="button" class="essay-frac-toggle" aria-expanded="false">Tulis pecahan</button>
+        <div class="essay-frac-builder hidden">
+          <div class="essay-frac-stack">
+            <input type="text" class="essay-frac-num" inputmode="decimal" aria-label="Pembilang" placeholder="3" />
+            <input type="text" class="essay-frac-den" inputmode="decimal" aria-label="Penyebut" placeholder="4" />
+          </div>
+          <button type="button" class="essay-frac-insert">Sisipkan</button>
+        </div>
+      </div>
+      <p class="essay-read-as" aria-live="polite"></p>
+      <p class="essay-numeric-hint">Bentuk apa pun yang senilai diterima: <code>3/4</code>, <code>0,75</code>, atau <code>75%</code>.</p>
+    </div>
+  `;
+};
+
 export const renderQuestion = ({
   container,
   question,
@@ -181,7 +219,7 @@ export const renderQuestion = ({
       case "pgk":
         return renderOptions(question, currentAnswer, true, readOnly);
       case "essay":
-        return `<textarea id="essay-answer" rows="6" placeholder="Tulis jawaban" dir="auto" ${readOnly ? "disabled" : ""}>${escapeHtml(currentAnswer || "")}</textarea>`;
+        return renderEssay(question, currentAnswer, readOnly);
       case "match":
         return renderMatch(question, currentAnswer, readOnly);
       case "tf_matrix":
@@ -191,12 +229,39 @@ export const renderQuestion = ({
     }
   })();
 
-  container.innerHTML = `
-    <div class="question" data-id="${question.id}">
-      <div class="q-content" dir="auto">${question.content}</div>
-      <div class="q-body">${body}</div>
-    </div>
-  `;
+  if (question.passageContent) {
+    container.innerHTML = `
+      <div class="split-question-container" data-id="${question.id}">
+        <div class="passage-panel" dir="auto">
+          <div class="passage-header">${escapeHtml(question.passageTitle || "Wacana")}</div>
+          <div class="passage-body">${question.passageContent}</div>
+        </div>
+        <div class="question-panel">
+          <div class="question">
+            <div class="q-content" dir="auto">${question.content}</div>
+            <div class="q-body">${body}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div class="question" data-id="${question.id}">
+        <div class="q-content" dir="auto">${question.content}</div>
+        <div class="q-body">${body}</div>
+      </div>
+    `;
+  }
+
+  // Wrap tables to make them responsive and prevent styling mismatch
+  container.querySelectorAll(".q-content table, .passage-body table").forEach((table) => {
+    if (table.parentElement && !table.parentElement.classList.contains("table-wrapper")) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "table-wrapper";
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    }
+  });
 
   if (readOnly) {
     return;
@@ -242,7 +307,95 @@ export const renderQuestion = ({
 
   if (question.type === "essay") {
     const textarea = container.querySelector("#essay-answer");
-    textarea?.addEventListener("input", () => onAnswerChange(textarea.value));
+    if (!textarea) {
+      return;
+    }
+
+    const readAsEl = container.querySelector(".essay-read-as");
+
+    const refreshReadAs = () => {
+      if (!readAsEl) {
+        return;
+      }
+      const raw = textarea.value.trim();
+      if (!raw) {
+        readAsEl.textContent = "";
+        readAsEl.classList.remove("warn");
+        return;
+      }
+      const described = describeAnswer(raw, "numeric");
+      if (!described.ok) {
+        readAsEl.textContent = "Belum terbaca sebagai angka — periksa lagi penulisannya.";
+        readAsEl.classList.add("warn");
+        return;
+      }
+      const value = toIdNumber(described.readAs);
+      const decimal = toIdNumber(described.readAsDecimal);
+      readAsEl.textContent =
+        decimal && decimal !== value
+          ? `Terbaca sebagai: ${value} (= ${decimal})`
+          : `Terbaca sebagai: ${value}`;
+      readAsEl.classList.remove("warn");
+    };
+
+    textarea.addEventListener("input", () => {
+      onAnswerChange(textarea.value);
+      refreshReadAs();
+    });
+
+    const builder = container.querySelector(".essay-frac-builder");
+    if (builder) {
+      const toggle = container.querySelector(".essay-frac-toggle");
+      const numEl = builder.querySelector(".essay-frac-num");
+      const denEl = builder.querySelector(".essay-frac-den");
+
+      const insertFraction = () => {
+        const num = numEl.value.trim();
+        const den = denEl.value.trim();
+        if (!num || !den) {
+          (num ? denEl : numEl).focus();
+          return;
+        }
+        // Sisipkan di posisi kursor supaya jawaban yang sudah diketik tidak hilang.
+        const text = `${num}/${den}`;
+        const start = textarea.selectionStart ?? textarea.value.length;
+        const end = textarea.selectionEnd ?? start;
+        textarea.value = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
+        numEl.value = "";
+        denEl.value = "";
+        onAnswerChange(textarea.value);
+        refreshReadAs();
+        textarea.focus();
+        const caret = start + text.length;
+        textarea.setSelectionRange(caret, caret);
+      };
+
+      toggle?.addEventListener("click", () => {
+        const opened = builder.classList.toggle("hidden") === false;
+        toggle.setAttribute("aria-expanded", String(opened));
+        if (opened) {
+          numEl.focus();
+        }
+      });
+
+      builder.querySelector(".essay-frac-insert")?.addEventListener("click", insertFraction);
+
+      [numEl, denEl].forEach((el) => {
+        el.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") {
+            return;
+          }
+          event.preventDefault();
+          if (el === numEl && !denEl.value.trim()) {
+            denEl.focus();
+            return;
+          }
+          insertFraction();
+        });
+      });
+    }
+
+    refreshReadAs();
     return;
   }
 

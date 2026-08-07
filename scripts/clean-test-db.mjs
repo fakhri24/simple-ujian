@@ -1,6 +1,8 @@
 import "dotenv/config";
 import fs from "node:fs";
-import admin from "firebase-admin";
+import { initializeApp, cert, getApps } from "firebase-admin";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 if (!serviceAccountPath) {
@@ -10,20 +12,20 @@ if (!serviceAccountPath) {
 const rawServiceAccount = fs.readFileSync(serviceAccountPath, "utf-8");
 const serviceAccount = JSON.parse(rawServiceAccount);
 
-if (admin.apps.length === 0) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+if (getApps().length === 0) {
+  initializeApp({
+    credential: cert(serviceAccount),
   });
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 const testUserEmail = "siswa@example.com";
 
 async function clean() {
   console.log("Memulai pembersihan data pengujian...");
   
   // 1. Dapatkan UID dari siswa@example.com
-  const userRecord = await admin.auth().getUserByEmail(testUserEmail);
+  const userRecord = await getAuth().getUserByEmail(testUserEmail);
   const uid = userRecord.uid;
   console.log(`UID Siswa Uji: ${uid}`);
 
@@ -42,16 +44,19 @@ async function clean() {
     batch.delete(doc.ref);
   });
 
-  // 4. Reset session
-  batch.update(db.collection("users").doc(uid), {
-    sessionId: null,
-    lastActiveAt: null
+  // 4. Reset sessions for all users to bypass concurrent session protection in tests
+  const usersSnap = await db.collection("users").get();
+  usersSnap.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      sessionId: null,
+      lastActiveAt: null
+    });
   });
 
   // 5. Update target test exam timeframe to ensure it is not expired
   batch.update(db.collection("exams").doc("FBmjZeEIhJOcXokiNEYS"), {
-    startTime: admin.firestore.Timestamp.fromDate(new Date("2020-01-01")),
-    latestStartTime: admin.firestore.Timestamp.fromDate(new Date("2030-01-01")),
+    startTime: Timestamp.fromDate(new Date("2020-01-01")),
+    latestStartTime: Timestamp.fromDate(new Date("2030-01-01")),
     active: true
   });
 

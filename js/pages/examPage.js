@@ -19,7 +19,45 @@ import {
 } from "../db.js";
 import { renderQuestion } from "../questionRenderer.js";
 import { calculateScore } from "../scoring.js";
+import { mergeQuestionsWithKeys } from "../answerKeys.js";
 import { ensureSEBClearance } from "../seb-validate.js";
+
+const shuffleQuestionsWithPassages = (questionsList, randomize) => {
+  if (!randomize) {
+    return questionsList.map(q => q.id);
+  }
+  
+  const groups = [];
+  const groupMap = new Map();
+  
+  questionsList.forEach(q => {
+    const pid = q.passageId || "";
+    if (pid) {
+      if (!groupMap.has(pid)) {
+        const groupObj = { type: "passage", id: pid, questions: [] };
+        groupMap.set(pid, groupObj);
+        groups.push(groupObj);
+      }
+      groupMap.get(pid).questions.push(q);
+    } else {
+      groups.push({ type: "solo", id: q.id, questions: [q] });
+    }
+  });
+  
+  for (let i = groups.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [groups[i], groups[j]] = [groups[j], groups[i]];
+  }
+  
+  const finalIds = [];
+  groups.forEach(g => {
+    g.questions.forEach(q => {
+      finalIds.push(q.id);
+    });
+  });
+  
+  return finalIds;
+};
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -341,7 +379,21 @@ const bootstrap = async () => {
       return;
     }
 
-    const { exam, questions } = loaded;
+    const { exam } = loaded;
+    const examPassages = exam.passages || [];
+    const questions = loaded.questions.map(q => {
+      if (q.passageId) {
+        const passage = examPassages.find(p => p.id === q.passageId);
+        if (passage) {
+          return {
+            ...q,
+            passageTitle: passage.title,
+            passageContent: passage.content
+          };
+        }
+      }
+      return q;
+    });
     titleEl.textContent = exam.title;
 
     // Direct access check for private exams
@@ -693,37 +745,7 @@ const bootstrap = async () => {
           // Simpan pengerjaan otomatis saat terblokir
           try {
             const examKeys = await getExamKeys(exam.id);
-            let mergedQuestions = activeQuestions;
-            if (examKeys) {
-              const keysMap = examKeys.keys || {};
-              mergedQuestions = activeQuestions.map(q => {
-                const key = keysMap[q.id];
-                if (!key) return q;
-                if (q.type === "pg" || q.type === "tf" || q.type === "pgk") {
-                  return {
-                    ...q,
-                    options: q.options.map(opt => ({
-                      ...opt,
-                      isCorrect: (key.correctOptionIds || []).includes(opt.id)
-                    }))
-                  };
-                } else if (q.type === "tf_matrix") {
-                  return {
-                    ...q,
-                    statements: q.statements.map(stmt => ({
-                      ...stmt,
-                      isCorrect: key.correctStatements?.[stmt.id] || "false"
-                    }))
-                  };
-                } else if (q.type === "match") {
-                  return {
-                    ...q,
-                    matchPairs: key.matchPairs || []
-                  };
-                }
-                return q;
-              });
-            }
+            const mergedQuestions = mergeQuestionsWithKeys(activeQuestions, examKeys?.keys || {});
             const scoreResult = calculateScore(mergedQuestions, engine.answers);
             await createSubmission({
               examId: exam.id,
@@ -785,10 +807,7 @@ const bootstrap = async () => {
           // Shuffle questionIds if randomizeQuestions is true
           let targetQuestionIds = [...exam.questionIds];
           if (exam.randomizeQuestions) {
-            for (let i = targetQuestionIds.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [targetQuestionIds[i], targetQuestionIds[j]] = [targetQuestionIds[j], targetQuestionIds[i]];
-            }
+            targetQuestionIds = shuffleQuestionsWithPassages(questions, exam.randomizeQuestions);
           }
 
           attemptData = await initializeExamAttempt(
@@ -1102,37 +1121,7 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
 
     // 2. Fetch correct keys
     const examKeys = await getExamKeys(exam.id);
-    let mergedQuestions = questions;
-    if (examKeys) {
-      const keysMap = examKeys.keys || {};
-      mergedQuestions = questions.map(q => {
-        const key = keysMap[q.id];
-        if (!key) return q;
-        if (q.type === "pg" || q.type === "tf" || q.type === "pgk") {
-          return {
-            ...q,
-            options: q.options.map(opt => ({
-              ...opt,
-              isCorrect: (key.correctOptionIds || []).includes(opt.id)
-            }))
-          };
-        } else if (q.type === "tf_matrix") {
-          return {
-            ...q,
-            statements: q.statements.map(stmt => ({
-              ...stmt,
-              isCorrect: key.correctStatements?.[stmt.id] || "false"
-            }))
-          };
-        } else if (q.type === "match") {
-          return {
-            ...q,
-            matchPairs: key.matchPairs || []
-          };
-        }
-        return q;
-      });
-    }
+    const mergedQuestions = mergeQuestionsWithKeys(questions, examKeys?.keys || {});
 
     const scoreResult = calculateScore(mergedQuestions, engine.answers);
     

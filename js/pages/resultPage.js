@@ -1,6 +1,7 @@
 import { requireRole } from "../rbac.js";
 import { streamSubmission, getQuestionsByIds, getExamById, getExamKeys } from "../db.js";
 import { renderQuestion } from "../questionRenderer.js";
+import { mergeQuestionWithKey } from "../answerKeys.js";
 import renderMathInElement from "katex/contrib/auto-render";
 import "katex/dist/katex.min.css";
 
@@ -119,33 +120,20 @@ const bootstrap = async () => {
           // Fetch correct answer keys for this exam
           const examKeys = await getExamKeys(submission.examId);
           const keysMap = examKeys?.keys || {};
+          const passages = exam?.passages || [];
 
           const mergedQuestions = questions.map(q => {
-            const key = keysMap[q.id];
-            if (!key) return q;
-            if (q.type === "pg" || q.type === "tf" || q.type === "pgk") {
-              return {
-                ...q,
-                options: q.options.map(opt => ({
-                  ...opt,
-                  isCorrect: (key.correctOptionIds || []).includes(opt.id)
-                }))
-              };
-            } else if (q.type === "tf_matrix") {
-              return {
-                ...q,
-                statements: q.statements.map(stmt => ({
-                  ...stmt,
-                  isCorrect: key.correctStatements?.[stmt.id] || "false"
-                }))
-              };
-            } else if (q.type === "match") {
-              return {
-                ...q,
-                matchPairs: key.matchPairs || []
-              };
+            const mappedQ = { ...q };
+
+            if (mappedQ.passageId) {
+              const passage = passages.find(p => p.id === mappedQ.passageId);
+              if (passage) {
+                mappedQ.passageTitle = passage.title;
+                mappedQ.passageContent = passage.content;
+              }
             }
-            return q;
+
+            return mergeQuestionWithKey(mappedQ, keysMap[mappedQ.id]);
           });
 
           breakdownEl.innerHTML = "";

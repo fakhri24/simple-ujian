@@ -1,4 +1,5 @@
-import { Document, Packer, Paragraph, HeadingLevel, ImageRun, TextRun, PageBreak } from "docx";
+import { Document, Packer, Paragraph, HeadingLevel, ImageRun, TextRun, PageBreak, Table, TableRow, TableCell, BorderStyle, WidthType } from "docx";
+import { essayKeyToDocxLines } from "../../essayKeyDocx.js";
 
 const fetchImageAsArrayBuffer = async (url) => {
   try {
@@ -35,6 +36,190 @@ const getImageDimensions = (src) => {
     img.src = src;
   });
 };
+
+const convertHtmlToDocxElements = async (htmlString, editorTempImages = {}, isQuestion = false, qIndex = null) => {
+  const container = document.createElement("div");
+  container.innerHTML = htmlString;
+
+  const docxElements = [];
+  let firstBlockHandled = false;
+
+  // Helper to handle text block with question index
+  const handleTextParagraph = (text) => {
+    if (isQuestion && !firstBlockHandled) {
+      firstBlockHandled = true;
+      return new Paragraph({
+        text: `${qIndex}. ${text}`,
+        heading: HeadingLevel.HEADING_2,
+      });
+    } else {
+      return new Paragraph({ text });
+    }
+  };
+
+  // Helper to handle image
+  const handleImageParagraph = async (imgEl) => {
+    let src = imgEl.getAttribute("src") || "";
+    if (editorTempImages[src]) {
+      src = editorTempImages[src];
+    }
+    let buffer = null;
+    let imgType = "png";
+    
+    if (src.startsWith("data:image")) {
+      buffer = getArrayBufferFromBase64(src);
+      const match = src.match(/data:image\/([a-zA-Z+]+);/);
+      if (match) imgType = match[1];
+    } else if (src.startsWith("http") || src.startsWith("/")) {
+      buffer = await fetchImageAsArrayBuffer(src);
+      if (src.endsWith(".jpg") || src.endsWith(".jpeg")) imgType = "jpg";
+    }
+    
+    if (buffer) {
+      let width = 300;
+      let height = 200;
+      try {
+        const dims = await getImageDimensions(src);
+        const maxW = 400; // Safe maximum width for Docx A4 paper layout
+        if (dims.width > maxW) {
+          height = Math.round((maxW / dims.width) * dims.height);
+          width = maxW;
+        } else {
+          width = dims.width || 300;
+          height = dims.height || 200;
+        }
+      } catch (err) {
+        console.error("Gagal mendeteksi dimensi gambar asli:", err);
+      }
+
+      return new Paragraph({
+        children: [
+          new ImageRun({
+            data: buffer,
+            transformation: {
+              width: width,
+              height: height,
+            },
+            type: imgType === "jpg" ? "jpg" : "png",
+          }),
+        ],
+      });
+    }
+    return null;
+  };
+
+  // Standardize the container: wrap any loose text nodes or inline elements at the root level in <p>
+  const cleanNodes = [];
+  let currentGroup = [];
+  
+  const flushGroup = () => {
+    if (currentGroup.length > 0) {
+      const p = document.createElement("p");
+      currentGroup.forEach(node => p.appendChild(node.cloneNode(true)));
+      cleanNodes.push(p);
+      currentGroup = [];
+    }
+  };
+
+  for (const node of [...container.childNodes]) {
+    const isBlock = node.nodeType === Node.ELEMENT_NODE && 
+      ["P", "DIV", "TABLE", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "OL", "UL"].includes(node.tagName);
+    
+    if (isBlock) {
+      flushGroup();
+      cleanNodes.push(node);
+    } else {
+      currentGroup.push(node);
+    }
+  }
+  flushGroup();
+
+  if (cleanNodes.length === 0) {
+    const text = container.textContent.trim();
+    if (text) {
+      docxElements.push(handleTextParagraph(text));
+    }
+    return docxElements;
+  }
+
+  for (const el of cleanNodes) {
+    if (el.tagName === "TABLE") {
+      // Ensure question number is handled if table is first
+      if (isQuestion && !firstBlockHandled) {
+        docxElements.push(new Paragraph({
+          text: `${qIndex}.`,
+          heading: HeadingLevel.HEADING_2,
+        }));
+        firstBlockHandled = true;
+      }
+
+      const rows = [];
+      const trElements = [...el.querySelectorAll("tr")];
+      for (const tr of trElements) {
+        const cells = [];
+        const tdElements = [...tr.querySelectorAll("td, th")];
+        for (const td of tdElements) {
+          const isHeader = td.tagName === "TH";
+          const cellText = td.textContent.trim();
+          
+          cells.push(new TableCell({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: cellText,
+                    bold: isHeader,
+                  })
+                ]
+              })
+            ],
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+              left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+              right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+            },
+            shading: isHeader ? { fill: "F2F2F2" } : undefined,
+          }));
+        }
+        if (cells.length > 0) {
+          rows.push(new TableRow({ children: cells }));
+        }
+      }
+
+      if (rows.length > 0) {
+        docxElements.push(new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: rows,
+        }));
+      }
+    } else if (el.tagName === "P" || el.tagName.startsWith("H") || el.tagName === "DIV" || el.tagName === "LI") {
+      const text = el.textContent.trim();
+      const imgs = [...el.querySelectorAll("img")];
+
+      if (text) {
+        docxElements.push(handleTextParagraph(text));
+      } else if (isQuestion && !firstBlockHandled && imgs.length > 0) {
+        docxElements.push(new Paragraph({
+          text: `${qIndex}.`,
+          heading: HeadingLevel.HEADING_2,
+        }));
+        firstBlockHandled = true;
+      }
+
+      for (const img of imgs) {
+        const imgPara = await handleImageParagraph(img);
+        if (imgPara) docxElements.push(imgPara);
+      }
+    }
+  }
+
+  return docxElements;
+};
+
 
 export const exportQuestionsToDocx = async (questions, filename, editorTempImages = {}, feedbackEl) => {
   const children = [
@@ -130,89 +315,78 @@ export const exportQuestionsToDocx = async (questions, filename, editorTempImage
       ],
     }),
     new Paragraph({
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Petunjuk Wacana / Grup Soal (Passage):",
+          bold: true,
+          italics: true,
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Jika beberapa soal merujuk pada satu teks bacaan/wacana yang sama, gunakan penanda [GRUP SOAL: Judul Wacana] sebelum teks wacana.",
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Tuliskan isi wacana di bawahnya, lalu tulis soal-soal yang terkait seperti biasa.",
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Setelah soal terakhir dalam grup, tutup dengan penanda [TANPA GRUP SOAL] agar soal berikutnya tidak ikut tergabung dalam wacana tersebut.",
+        }),
+      ],
+    }),
+    new Paragraph({
       children: [new PageBreak()],
     }),
   ];
+  let lastPassageId = null;
 
   for (let idx = 0; idx < questions.length; idx++) {
     const q = questions[idx];
     
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = q.content;
-    
-    const imgElements = [...tempDiv.querySelectorAll("img")];
-    const paragraphsInQ = [...tempDiv.querySelectorAll("p, div, li")];
-    let qTextParts = [];
-    if (paragraphsInQ.length > 0) {
-      paragraphsInQ.forEach((pEl) => {
-        const text = pEl.textContent.trim();
-        if (text) qTextParts.push(text);
-      });
-    } else {
-      const text = tempDiv.textContent.trim();
-      if (text) qTextParts.push(text);
-    }
-    
-    const firstTextPart = qTextParts.shift() || "Soal bergambar/tanpa teks";
-    children.push(new Paragraph({
-      text: `${idx + 1}. ${firstTextPart}`,
-      heading: HeadingLevel.HEADING_2,
-    }));
-
-    for (const img of imgElements) {
-      let src = img.getAttribute("src") || "";
-      if (editorTempImages[src]) {
-        src = editorTempImages[src];
-      }
-      let buffer = null;
-      let imgType = "png";
+    if (q.passageId && q.passageId !== lastPassageId) {
+      children.push(new Paragraph({
+        children: [
+          new TextRun({
+            text: `[GRUP SOAL: ${q.passageTitle || "Wacana"}]`,
+            bold: true,
+          })
+        ]
+      }));
       
-      if (src.startsWith("data:image")) {
-        buffer = getArrayBufferFromBase64(src);
-        const match = src.match(/data:image\/([a-zA-Z+]+);/);
-        if (match) imgType = match[1];
-      } else if (src.startsWith("http") || src.startsWith("/")) {
-        buffer = await fetchImageAsArrayBuffer(src);
-        if (src.endsWith(".jpg") || src.endsWith(".jpeg")) imgType = "jpg";
-      }
-      
-      if (buffer) {
-        let width = 300;
-        let height = 200;
-        try {
-          const dims = await getImageDimensions(src);
-          const maxW = 400; // Safe maximum width for Docx A4 paper layout
-          if (dims.width > maxW) {
-            height = Math.round((maxW / dims.width) * dims.height);
-            width = maxW;
-          } else {
-            width = dims.width || 300;
-            height = dims.height || 200;
-          }
-        } catch (err) {
-          console.error("Gagal mendeteksi dimensi gambar asli:", err);
-        }
-
+      const passageElements = await convertHtmlToDocxElements(q.passageContent || "", editorTempImages);
+      children.push(...passageElements);
+      children.push(new Paragraph({ text: "" }));
+      lastPassageId = q.passageId;
+    } else if (!q.passageId) {
+      if (lastPassageId !== null) {
         children.push(new Paragraph({
           children: [
-            new ImageRun({
-              data: buffer,
-              transformation: {
-                width: width,
-                height: height,
-              },
-              type: imgType === "jpg" ? "jpg" : "png",
-            }),
-          ],
+            new TextRun({
+              text: "[TANPA GRUP SOAL]",
+              bold: true,
+            })
+          ]
         }));
+        children.push(new Paragraph({ text: "" }));
       }
+      lastPassageId = null;
     }
-
-    qTextParts.forEach((partText) => {
-      children.push(new Paragraph({
-        text: partText,
-      }));
-    });
+    
+    const qElements = await convertHtmlToDocxElements(q.content, editorTempImages, true, idx + 1);
+    children.push(...qElements);
 
     if (q.type !== "pg") {
       children.push(new Paragraph({ text: `Tipe: ${q.type}` }));
@@ -244,6 +418,11 @@ export const exportQuestionsToDocx = async (questions, filename, editorTempImage
     } else if (q.type === "match") {
       (q.matchPairs || []).forEach((pair) => {
         children.push(new Paragraph({ text: `Pasangan: ${pair.left} = ${pair.right}` }));
+      });
+    } else if (q.type === "essay") {
+      // Hanya essay yang dinilai otomatis yang punya baris kunci.
+      essayKeyToDocxLines(q).forEach((line) => {
+        children.push(new Paragraph({ text: line }));
       });
     }
 

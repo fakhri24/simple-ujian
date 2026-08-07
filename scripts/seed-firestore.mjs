@@ -1,6 +1,9 @@
 import "dotenv/config";
 import fs from "node:fs";
-import admin from "firebase-admin";
+import { initializeApp, cert } from "firebase-admin";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
+import { buildKeyPayload } from "../js/answerKeys.js";
 
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 if (!serviceAccountPath) {
@@ -10,11 +13,11 @@ if (!serviceAccountPath) {
 const rawServiceAccount = fs.readFileSync(serviceAccountPath, "utf-8");
 const serviceAccount = JSON.parse(rawServiceAccount);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
 });
 
-const db = admin.firestore();
+const db = getFirestore();
 
 const adminEmail = process.env.SEED_ADMIN_EMAIL || "admin@example.com";
 const adminPassword = process.env.SEED_ADMIN_PASSWORD || "Admin123!";
@@ -24,9 +27,9 @@ const studentPassword = process.env.SEED_STUDENT_PASSWORD || "Siswa123!";
 const ensureUser = async ({ email, password, role, namaLengkap, kelas, nis }) => {
   let userRecord;
   try {
-    userRecord = await admin.auth().getUserByEmail(email);
+    userRecord = await getAuth().getUserByEmail(email);
   } catch {
-    userRecord = await admin.auth().createUser({ email, password });
+    userRecord = await getAuth().createUser({ email, password });
   }
 
   const payload = {
@@ -57,27 +60,18 @@ const splitQuestionPublicAndKey = (q) => {
     content: q.content,
     scoreWeight: q.scoreWeight || 100,
   };
-  const keyPayload = {
-    type: q.type,
-  };
+  const keyPayload = buildKeyPayload(q);
 
   if (q.type === "pg" || q.type === "pgk" || q.type === "tf") {
     publicPayload.options = (q.options || []).map(opt => ({
       id: opt.id,
       text: opt.text
     }));
-    keyPayload.correctOptionIds = (q.options || [])
-      .filter(opt => opt.isCorrect)
-      .map(opt => opt.id);
   } else if (q.type === "tf_matrix") {
     publicPayload.statements = (q.statements || []).map(stmt => ({
       id: stmt.id,
       text: stmt.text
     }));
-    keyPayload.correctStatements = {};
-    (q.statements || []).forEach(stmt => {
-      keyPayload.correctStatements[stmt.id] = String(stmt.isCorrect);
-    });
   } else if (q.type === "match") {
     const lefts = (q.matchPairs || []).map(p => p.left);
     const rights = (q.matchPairs || []).map(p => p.right);
@@ -92,8 +86,6 @@ const splitQuestionPublicAndKey = (q) => {
       left: left,
       right: shuffledRights[idx]
     }));
-    
-    keyPayload.matchPairs = q.matchPairs || [];
   }
 
   return { publicPayload, keyPayload };
@@ -103,8 +95,8 @@ const createQuestion = async (question) => {
   const { publicPayload, keyPayload } = splitQuestionPublicAndKey(question);
   const ref = await db.collection("questions").add({
     ...publicPayload,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
   keys[ref.id] = keyPayload;
   return ref.id;
@@ -206,8 +198,8 @@ const seed = async () => {
     active: true,
     visibility: "public",
     questionIds,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   await db.collection("exam_keys").doc(examRef.id).set({

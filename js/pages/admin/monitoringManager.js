@@ -10,6 +10,7 @@ import {
   getUserProfile
 } from "../../db.js";
 import { calculateScore } from "../../scoring.js";
+import { mergeQuestionsWithKeys } from "../../answerKeys.js";
 
 let activeAttempts = [];
 let monitoringIntervalRef = null;
@@ -74,33 +75,7 @@ const forceSubmitStudentAttempt = async (examId, userId) => {
   const keysData = await getExamKeys(examId);
   const keysMap = keysData?.keys || {};
 
-  const mergedQuestions = questions.map(q => {
-    const key = keysMap[q.id];
-    if (!key) return q;
-    if (q.type === "pg" || q.type === "tf" || q.type === "pgk") {
-      return {
-        ...q,
-        options: q.options.map(opt => ({
-          ...opt,
-          isCorrect: (key.correctOptionIds || []).includes(opt.id)
-        }))
-      };
-    } else if (q.type === "tf_matrix") {
-      return {
-        ...q,
-        statements: q.statements.map(stmt => ({
-          ...stmt,
-          isCorrect: key.correctStatements?.[stmt.id] || "false"
-        }))
-      };
-    } else if (q.type === "match") {
-      return {
-        ...q,
-        matchPairs: key.matchPairs || []
-      };
-    }
-    return q;
-  });
+  const mergedQuestions = mergeQuestionsWithKeys(questions, keysMap);
 
   const answers = attempt.answersByQuestionId || {};
   const scoreResult = calculateScore(mergedQuestions, answers);
