@@ -27,6 +27,7 @@ import {
   deleteSubmission,
   getExamKeys,
   saveExamKeys,
+  getExamById,
 } from "../db.js";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
@@ -746,6 +747,7 @@ const parseImportedHtml = (htmlString) => {
         statements: [],
         keyString: "",
         essayLines: {},
+        sourceId: "",
       };
       
       const restText = questionMatch[2].trim();
@@ -766,6 +768,15 @@ const parseImportedHtml = (htmlString) => {
 
       if (text.toLowerCase().startsWith("bobot:")) {
         currentQuestion.scoreWeight = Number(text.split(":")[1].trim()) || 10;
+        return;
+      }
+
+      // Jejak identitas dari dokumen hasil ekspor. Polanya sengaja dibatasi
+      // ketat (mirip ID dokumen Firestore) supaya baris soal yang kebetulan
+      // diawali "ID:" tidak ikut tertelan sebagai metadata.
+      const idLineMatch = text.match(/^ID:\s*([A-Za-z0-9_-]{15,64})$/i);
+      if (idLineMatch) {
+        currentQuestion.sourceId = idLineMatch[1];
         return;
       }
 
@@ -900,6 +911,10 @@ const parseImportedHtml = (htmlString) => {
       scoreWeight: q.scoreWeight,
       passageId: q.passageId || "",
     };
+
+    if (q.sourceId) {
+      finalQuestion.sourceId = q.sourceId;
+    }
 
     if (q.type === "pg" || q.type === "pgk" || q.type === "tf") {
       finalQuestion.options = q.options;
@@ -3014,11 +3029,39 @@ const saveEditorQuestionsToFirestore = async () => {
     return;
   }
 
-  const ok = window.confirm("Apakah Anda yakin ingin menyimpan dan menimpa semua soal ujian ini? Semua soal lama pada ujian tersebut akan digantikan dengan soal dari editor.");
+  // Jaring pengaman untuk soal tanpa ID (mis. dokumen Word yang diketik ulang,
+  // bukan hasil ekspor): pakai ulang ID soal lama pada posisi yang sama. Kalau
+  // dibiarkan menerbitkan ID baru, kunci pada submissions.answersByQuestionId
+  // tidak lagi cocok dan jawaban siswa hilang dari halaman hasil.
+  let existingQuestionIds = [];
+  try {
+    const targetExam = await getExamById(targetExamId);
+    existingQuestionIds = targetExam?.questionIds || [];
+  } catch (err) {
+    console.error("Gagal membaca daftar soal ujian tujuan:", err);
+  }
+
+  const resolvedIds = editorQuestions.map((q, idx) => {
+    if (q.id && !String(q.id).startsWith("temp_")) return q.id;
+    return existingQuestionIds[idx] || null;
+  });
+
+  const reusedCount = resolvedIds.filter(Boolean).length;
+  const newCount = resolvedIds.length - reusedCount;
+
+  let confirmMsg = `Simpan ${editorQuestions.length} soal dan timpa semua soal pada ujian tujuan?\n\n`;
+  confirmMsg += `• ${reusedCount} soal menimpa soal lama (jawaban siswa tetap tertaut).\n`;
+  confirmMsg += `• ${newCount} soal dibuat sebagai soal baru.\n`;
+  if (existingQuestionIds.length && existingQuestionIds.length !== editorQuestions.length) {
+    confirmMsg += `\n⚠️ Jumlah soal berubah (${existingQuestionIds.length} → ${editorQuestions.length}).`;
+    confirmMsg += ` Hasil ujian yang sudah masuk bisa tidak lagi cocok dengan soalnya.`;
+  }
+
+  const ok = window.confirm(confirmMsg);
   if (!ok) return;
 
   feedbackEl.textContent = "Menyimpan perubahan soal ke Firestore...";
-  
+
   try {
     const finalQuestionIds = [];
     const keysMap = {};
@@ -3103,8 +3146,8 @@ const saveEditorQuestionsToFirestore = async () => {
         }));
       }
 
-      let questionId = q.id;
-      if (questionId && !questionId.startsWith("temp_")) {
+      let questionId = resolvedIds[i];
+      if (questionId) {
         await updateQuestion(questionId, publicPayload);
       } else {
         questionId = await createQuestion(publicPayload);
@@ -3502,7 +3545,10 @@ const initQuestionEditor = () => {
         }
 
         const mapped = parsedQuestions.map((q, idx) => ({
-          id: `temp_${Date.now()}_${idx}`,
+          // sourceId hanya ada bila dokumen ini hasil ekspor dari aplikasi.
+          // Memakainya kembali membuat soal menimpa dokumen Firestore yang sama,
+          // sehingga jawaban siswa yang sudah tersimpan tetap tertaut.
+          id: q.sourceId || `temp_${Date.now()}_${idx}`,
           type: q.type,
           content: extractBase64ImagesToPlaceholders(q.content),
           scoreWeight: q.scoreWeight || 100,

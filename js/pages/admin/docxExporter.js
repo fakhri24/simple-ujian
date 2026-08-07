@@ -388,6 +388,25 @@ export const exportQuestionsToDocx = async (questions, filename, editorTempImage
       ],
     }),
     new Paragraph({
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Tentang baris ID:",
+          bold: true,
+          italics: true,
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "Pada file hasil ekspor soal, tiap soal punya baris ID berwarna abu-abu. Baris itu penanda agar soal menempel kembali ke soal yang sama ketika file diimpor ulang, sehingga jawaban siswa yang sudah mengerjakan tetap terbaca di halaman hasil. Jangan diubah atau dihapus. Untuk soal yang benar-benar baru, biarkan tanpa baris ID.",
+        }),
+      ],
+    }),
+    new Paragraph({
       children: [new PageBreak()],
     }),
   ];
@@ -427,6 +446,22 @@ export const exportQuestionsToDocx = async (questions, filename, editorTempImage
     
     const qElements = await convertHtmlToDocxElements(q.content, editorTempImages, true, idx + 1);
     children.push(...qElements);
+
+    // Jejak identitas soal, dibaca lagi saat dokumen ini diimpor balik. Tanpa
+    // ini soal hasil impor dianggap baru dan dapat ID Firestore baru, sehingga
+    // submissions.answersByQuestionId (yang berkunci ID soal) kehilangan tautan
+    // dan jawaban siswa jadi tidak tampil di halaman hasil.
+    if (q.id && !String(q.id).startsWith("temp_")) {
+      children.push(new Paragraph({
+        children: [
+          new TextRun({
+            text: `ID: ${q.id}`,
+            size: 16,
+            color: "999999",
+          })
+        ]
+      }));
+    }
 
     if (q.type !== "pg") {
       children.push(new Paragraph({ text: `Tipe: ${q.type}` }));

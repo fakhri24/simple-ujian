@@ -18,6 +18,9 @@ users.json
 # File harus ada di public/ saat build+deploy. Sumber: Google Drive (lihat catatan tim).
 public/SimpleUjianBrowser.exe
 
+# Cadangan submission dari scripts/repair-question-ids.mjs — berisi jawaban siswa
+backup/
+
 # Tool / Agent files
 .agents/
 .claude/
