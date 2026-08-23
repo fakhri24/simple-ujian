@@ -92,8 +92,32 @@ export const initStudentManagement = () => {
       try {
         await deleteApp(tempApp);
       } catch (_) {}
-      return { success: false, error: error.message };
+      return { success: false, code: error.code || "", error: error.message };
     }
+  };
+
+  const PROFILE_FIELD_LABELS = {
+    namaLengkap: "Nama Lengkap",
+    kelas: "Kelas",
+    nis: "NIS"
+  };
+
+  /**
+   * Membandingkan profil siswa yang sudah ada dengan satu baris CSV.
+   * Hanya field yang terisi di CSV DAN berbeda dari data lama yang dikembalikan,
+   * supaya kolom kosong di CSV tidak menimpa data lama yang sudah benar.
+   * Email tidak ikut (dipakai sebagai kunci pencocokan) dan password tidak bisa
+   * diubah dari sisi klien tanpa Admin SDK.
+   */
+  const buildProfileUpdates = (existing, incoming) => {
+    const updates = {};
+    Object.keys(PROFILE_FIELD_LABELS).forEach((field) => {
+      const nextValue = (incoming[field] || "").trim();
+      if (!nextValue) return;
+      if (nextValue === (existing[field] || "").trim()) return;
+      updates[field] = nextValue;
+    });
+    return updates;
   };
 
   const renderStudentPagination = (totalItems) => {
@@ -327,6 +351,7 @@ export const initStudentManagement = () => {
   const progressFill = document.querySelector("#student-import-progress-fill");
   const progressText = document.querySelector("#student-import-progress-text");
   const logList = document.querySelector("#student-import-log-list");
+  const updateExistingToggle = document.querySelector("#student-import-update-existing");
 
   importBtn?.addEventListener("click", async () => {
     const file = fileInput?.files?.[0];
@@ -351,6 +376,9 @@ export const initStudentManagement = () => {
       } else if (type === "danger") {
         logItem.style.color = "#f43f5e";
         logItem.textContent = `❌ ${message}`;
+      } else if (type === "warn") {
+        logItem.style.color = "#f59e0b";
+        logItem.textContent = `⏭️ ${message}`;
       } else {
         logItem.textContent = `⏳ ${message}`;
       }
@@ -379,20 +407,74 @@ export const initStudentManagement = () => {
           return;
         }
 
-        addLog(`Ditemukan ${studentsToRegister.length} data siswa untuk diimpor.`, "info");
+        const updateExisting = updateExistingToggle?.checked === true;
+        addLog(
+          `Ditemukan ${studentsToRegister.length} data siswa. Siswa yang sudah terdaftar akan ${updateExisting ? "DIPERBARUI data profilnya" : "DILEWATI"}.`,
+          "info"
+        );
+
+        // Ambil profil siswa yang sudah ada sekali saja (1 query), lalu indeks per email.
+        // Dipakai untuk mendeteksi duplikat tanpa perlu menunggu error dari Firebase Auth.
+        progressText.textContent = "Memeriksa siswa yang sudah terdaftar...";
+        const existingByEmail = new Map();
+        try {
+          const existingStudents = await listStudents();
+          existingStudents.forEach((siswa) => {
+            const key = (siswa.email || "").trim().toLowerCase();
+            if (key) existingByEmail.set(key, siswa);
+          });
+        } catch (err) {
+          addLog(`Gagal memuat daftar siswa lama (${err.message}). Duplikat tetap terdeteksi lewat Firebase Auth.`, "warn");
+        }
 
         let successCount = 0;
+        let updatedCount = 0;
+        let skippedCount = 0;
         let failCount = 0;
+
+        const applyExistingStudent = async (existing, student, label) => {
+          if (!updateExisting) {
+            skippedCount++;
+            addLog(`${label} -> SUDAH TERDAFTAR — dilewati`, "warn");
+            return;
+          }
+
+          const updates = buildProfileUpdates(existing, student);
+          if (Object.keys(updates).length === 0) {
+            skippedCount++;
+            addLog(`${label} -> SUDAH TERDAFTAR, data sudah sama — dilewati`, "warn");
+            return;
+          }
+
+          try {
+            await upsertUserProfile(existing.uid, updates);
+            // Sinkronkan salinan lokal agar baris duplikat berikutnya dibandingkan dengan data terbaru
+            Object.assign(existing, updates);
+            updatedCount++;
+            const changedLabels = Object.keys(updates).map((field) => PROFILE_FIELD_LABELS[field]).join(", ");
+            addLog(`${label} -> DIPERBARUI (${changedLabels}). Password & riwayat ujian tidak berubah.`, "success");
+          } catch (err) {
+            failCount++;
+            addLog(`${label} -> GAGAL memperbarui (${err.message})`, "danger");
+          }
+        };
 
         for (let i = 0; i < studentsToRegister.length; i++) {
           const student = studentsToRegister[i];
           const num = i + 1;
           const total = studentsToRegister.length;
+          const label = student.namaLengkap || student.email;
 
           progressText.textContent = `Memproses ${num} dari ${total} siswa...`;
           progressFill.style.width = `${(num / total) * 100}%`;
 
-          addLog(`Mendaftarkan [${num}/${total}]: ${student.namaLengkap || student.email}...`, "info");
+          addLog(`Memproses [${num}/${total}]: ${label}...`, "info");
+
+          const existing = existingByEmail.get((student.email || "").trim().toLowerCase());
+          if (existing) {
+            await applyExistingStudent(existing, student, label);
+            continue;
+          }
 
           const res = await registerNewStudent(
             student.namaLengkap,
@@ -404,15 +486,20 @@ export const initStudentManagement = () => {
 
           if (res.success) {
             successCount++;
-            addLog(`${student.namaLengkap || student.email} -> SUKSES`, "success");
+            addLog(`${label} -> SUKSES (akun baru dibuat)`, "success");
+          } else if (res.code === "auth/email-already-in-use") {
+            // Akun ada di Firebase Auth, tapi profilnya tidak ada di koleksi `users`
+            skippedCount++;
+            addLog(`${label} -> SUDAH TERDAFTAR di Auth, profil siswa tidak ditemukan — dilewati`, "warn");
           } else {
             failCount++;
-            addLog(`${student.namaLengkap || student.email} -> GAGAL (${res.error})`, "danger");
+            addLog(`${label} -> GAGAL (${res.error})`, "danger");
           }
         }
 
-        progressText.textContent = `Selesai! Sukses: ${successCount}, Gagal: ${failCount}`;
-        addLog(`Impor selesai! Sukses: ${successCount}, Gagal: ${failCount}`, "info");
+        const summary = `Baru: ${successCount}, Diperbarui: ${updatedCount}, Dilewati: ${skippedCount}, Gagal: ${failCount}`;
+        progressText.textContent = `Selesai! ${summary}`;
+        addLog(`Impor selesai! ${summary}`, "info");
 
         fileInput.value = "";
         importBtn.disabled = false;
