@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { db, storage, auth } from "./firebase-config.js";
 import { ref, deleteObject } from "firebase/storage";
+import { getServerNow } from "./timeSync.js";
 
 const usersCol = collection(db, "users");
 const examsCol = collection(db, "exams");
@@ -342,8 +343,9 @@ export const initializeExamAttempt = async (examId, userId, email, durationMinut
     }
 
     const durationSeconds = durationMinutes * 60;
-    const startedAt = new Date().toISOString();
-    const endTime = Date.now() + durationSeconds * 1000;
+    const nowServer = getServerNow();
+    const startedAt = new Date(nowServer).toISOString();
+    const endTime = nowServer + durationSeconds * 1000;
 
     const data = {
       examId,

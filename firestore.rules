@@ -15,9 +15,9 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Toleransi selisih jam client vs server (endTime dihitung dengan Date.now() di client)
+    // Toleransi selisih jam client vs server (endTime dihitung dengan toleransi jam client)
     function clockSkewMs() {
-      return 5 * 60 * 1000;
+      return 15 * 60 * 1000;
     }
 
     // Tiket izin SEB (exam_clearance) ditulis HANYA oleh Cloud Function

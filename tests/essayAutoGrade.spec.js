@@ -21,6 +21,7 @@ const selectOptionProgrammatically = async (page, selector, val) => {
       const option = select.options[i];
       if (option.value === value || option.textContent.includes(value)) {
         select.selectedIndex = i;
+        select.value = option.value;
         found = true;
         break;
       }
@@ -166,6 +167,7 @@ test.describe('Essay auto-grade: alur guru → siswa → rekap', () => {
     try {
       await startFsBtn.waitFor({ state: 'visible', timeout: 15000 });
       await startFsBtn.click();
+      await expect(startFsBtn).toBeHidden({ timeout: 15000 });
     } catch (e) {
       console.log('Overlay fullscreen tidak muncul.');
     }

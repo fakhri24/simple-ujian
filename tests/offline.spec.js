@@ -58,8 +58,8 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
     await expect(page).toHaveURL(/\/pages\/student\.html/);
     await expect(page.locator('#student-welcome')).toContainText('Selamat datang');
 
-    // Find "ASAT MTL X 2026" exam item, paginating if needed
-    let examItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+    // Find "[Uji Sistem] E2E Automated Test" exam item, paginating if needed
+    let examItem = page.locator('li', { hasText: '[Uji Sistem] E2E Automated Test' });
     let pageCount = 0;
     while (pageCount < 10) {
       if (await examItem.isVisible()) {
@@ -69,7 +69,7 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
       if (await nextBtn.isVisible() && !(await nextBtn.isDisabled())) {
         await nextBtn.click();
         await page.waitForTimeout(300); // short wait for page render
-        examItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+        examItem = page.locator('li', { hasText: '[Uji Sistem] E2E Automated Test' });
         pageCount++;
       } else {
         break;
@@ -174,7 +174,7 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
     await page.goto('/pages/student.html');
     
     // Ujian must show "Kirim Jawaban (Pending)" as time badge / button
-    const pendingExamItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+    const pendingExamItem = page.locator('li', { hasText: '[Uji Sistem] E2E Automated Test' });
     const pendingTimeBadge = pendingExamItem.locator('.badge-warning');
     const pendingActionBtn = pendingExamItem.locator('.link-btn');
 
@@ -223,7 +223,7 @@ test.describe('CBT Offline & Submit Edge Cases', () => {
     });
 
     if (userId) {
-      const pendingFlag = await page.evaluate((uid) => localStorage.getItem(`simpleUjian:submitPending:${uid}:FBmjZeEIhJOcXokiNEYS`), userId);
+      const pendingFlag = await page.evaluate((uid) => localStorage.getItem(`simpleUjian:submitPending:${uid}:test_e2e_exam`), userId);
       expect(pendingFlag).toBeNull();
     }
   });

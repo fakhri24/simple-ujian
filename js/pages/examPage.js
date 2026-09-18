@@ -21,6 +21,7 @@ import { renderQuestion } from "../questionRenderer.js";
 import { calculateScore } from "../scoring.js";
 import { mergeQuestionsWithKeys } from "../answerKeys.js";
 import { ensureSEBClearance } from "../seb-validate.js";
+import { syncServerTime, getServerNow, getServerOffsetMs } from "../timeSync.js";
 
 const shuffleQuestionsWithPassages = (questionsList, randomize) => {
   if (!randomize) {
@@ -338,6 +339,7 @@ const reorderQuestions = (questionsList, questionIdsOrder) => {
 
 const bootstrap = async () => {
   try {
+    await syncServerTime();
     const access = await requireRole("siswa");
     if (!access) {
       return;
@@ -402,14 +404,17 @@ const bootstrap = async () => {
       return;
     }
 
-    // Periksa apakah pengerjaan hanya sekali dan sudah dikerjakan sebelumnya
+    // Periksa submission yang sudah ada
+    const existingSubmission = await findSubmission(examId, userId);
     const allowMultipleAttempts = exam.allowMultipleAttempts ?? true;
-    if (!allowMultipleAttempts) {
-      const existingSubmission = await findSubmission(examId, userId);
-      if (existingSubmission) {
-        showFatalError("Akses Ujian Ditutup", "Anda sudah menyelesaikan ujian ini dan batas pengerjaan adalah satu kali.");
+    if (!allowMultipleAttempts && existingSubmission) {
+      const showResults = exam.showResultsImmediately ?? true;
+      if (showResults) {
+        window.location.replace(`/pages/result.html?submissionId=${existingSubmission.id}`);
         return;
       }
+      showFatalError("Akses Ujian Ditutup", "Anda sudah menyelesaikan ujian ini dan batas pengerjaan adalah satu kali.");
+      return;
     }
 
     feedbackEl.textContent = "Memverifikasi sesi ujian...";
@@ -417,6 +422,47 @@ const bootstrap = async () => {
 
     if (attempt && attempt.status === "blocked") {
       showFatalError("Akses Ujian Diblokir", "Akses ujian Anda telah diblokir oleh Guru/Admin karena terdeteksi melakukan kecurangan.");
+      return;
+    }
+
+    // Auto-recovery jika attempt berstatus 'submitted' tapi dokumen submission belum terbuat
+    if (attempt && attempt.status === "submitted" && !existingSubmission) {
+      hideGlobalLoading();
+      feedbackEl.textContent = "Menyelesaikan proses pengiriman jawaban...";
+      let activeQuestions = [...questions];
+      if (attempt.questionIds) {
+        activeQuestions = reorderQuestions(questions, attempt.questionIds);
+      }
+      const attemptKey = `simpleUjian:attempt:${userId}:${exam.id}`;
+      const savedAttempt = JSON.parse(localStorage.getItem(attemptKey) || "{}");
+      const mergedAnswers = {
+        ...(attempt.answersByQuestionId || {}),
+        ...(savedAttempt.answersByQuestionId || {})
+      };
+      const mockEngine = {
+        answers: mergedAnswers,
+        unansweredCount: () => 0,
+        stop: () => {},
+        clearStorage: () => {
+          localStorage.removeItem(attemptKey);
+          localStorage.removeItem(`simpleUjian:timer:${userId}:${exam.id}`);
+          localStorage.removeItem(`simpleUjian:endTime:${userId}:${exam.id}`);
+          localStorage.removeItem(`simpleUjian:submitPending:${userId}:${exam.id}`);
+          localStorage.removeItem(`simpleUjian:voluntarySubmit:${userId}:${exam.id}`);
+        }
+      };
+      try {
+        await submitExam({
+          engine: mockEngine,
+          questions: activeQuestions,
+          exam,
+          userId,
+          email: access.user.email || "siswa@simple.ujian",
+          force: true
+        });
+      } catch (err) {
+        showFatalError("Gagal Mengirim Jawaban", `Sistem gagal menyelesaikan pengiriman jawaban: ${err.message || "Kesalahan tidak dikenal."}`);
+      }
       return;
     }
 
@@ -430,10 +476,10 @@ const bootstrap = async () => {
     }
 
     const isSubmitPending = localStorage.getItem(`simpleUjian:submitPending:${userId}:${examId}`) === "true";
-    const hasOngoingAttempt = attempt && attempt.status === "ongoing" && Date.now() < attempt.endTime;
-    const hasExpiredOngoingAttempt = attempt && attempt.status === "ongoing" && Date.now() >= attempt.endTime;
+    const now = getServerNow();
+    const hasOngoingAttempt = attempt && attempt.status === "ongoing" && now < attempt.endTime;
+    const hasExpiredOngoingAttempt = attempt && attempt.status === "ongoing" && now >= attempt.endTime;
 
-    const now = Date.now();
     const startTime = parseDate(exam.startTime);
     const latestStartTime = parseDate(exam.latestStartTime);
 
@@ -670,11 +716,11 @@ const bootstrap = async () => {
       const serverTime = await fetchServerExamTime(exam.id);
 
       // Offset jam: utamakan serverNow segar dari function; jika gagal, fallback
-      // ke offset yang diukur saat attempt dibuat (pendekatan B).
+      // ke syncServerTime / computeServerOffsetMs (pendekatan B).
       const serverOffsetMs =
         serverTime && typeof serverTime.serverNow === "number"
           ? serverTime.serverNow - Date.now()
-          : computeServerOffsetMs(sessionAttemptData);
+          : (getServerOffsetMs() || computeServerOffsetMs(sessionAttemptData));
 
       // endTime otoritatif dari server; jika gagal, fallback ke nilai tersimpan.
       currentEndTime =
@@ -803,6 +849,13 @@ const bootstrap = async () => {
         startBtn.disabled = true;
         startBtn.textContent = "Menghubungkan...";
         
+        // Bersihkan residu lokal dari pengerjaan sebelumnya untuk attempt baru
+        localStorage.removeItem(`simpleUjian:attempt:${userId}:${examId}`);
+        localStorage.removeItem(`simpleUjian:timer:${userId}:${examId}`);
+        localStorage.removeItem(`simpleUjian:endTime:${userId}:${examId}`);
+        localStorage.removeItem(`simpleUjian:submitPending:${userId}:${examId}`);
+        localStorage.removeItem(`simpleUjian:voluntarySubmit:${userId}:${examId}`);
+
         try {
           // Shuffle questionIds if randomizeQuestions is true
           let targetQuestionIds = [...exam.questionIds];
@@ -1095,17 +1148,14 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
   }
 
   try {
-    // 1. Update status to 'submitted' first so security rules allow reading keys!
-    await updateExamAttemptStatus(exam.id, userId, "submitted");
-
     // Periksa apakah guru menambahkan waktu ujian di server saat siswa offline (hanya jika force timeout)
     const latestAttempt = await getExamAttempt(exam.id, userId);
     const isVoluntary = localStorage.getItem(`simpleUjian:voluntarySubmit:${userId}:${exam.id}`) === "true";
-    if (force && !isVoluntary && latestAttempt && Date.now() < latestAttempt.endTime) {
-      // Batalkan submit! Kembalikan status menjadi ongoing
-      await updateExamAttemptStatus(exam.id, userId, "ongoing");
+    const nowServer = getServerNow();
+    const hasTeacherAddedTime = Number(latestAttempt?.extraMinutes || 0) > 0;
 
-      // Bersihkan bendera submit pending di localStorage
+    if (force && !isVoluntary && hasTeacherAddedTime && latestAttempt && nowServer < latestAttempt.endTime) {
+      // Guru benar-benar memberikan tambahan waktu di server! Batalkan submit
       localStorage.removeItem(`simpleUjian:submitPending:${userId}:${exam.id}`);
       localStorage.removeItem(`simpleUjian:voluntarySubmit:${userId}:${exam.id}`);
 
@@ -1117,6 +1167,11 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
       alert("Guru telah memberikan tambahan waktu! Anda dapat melanjutkan pengerjaan ujian.");
       window.location.reload();
       return false;
+    }
+
+    // 1. Update status to 'submitted' first so security rules allow reading keys!
+    if (!latestAttempt || latestAttempt.status !== "submitted") {
+      await updateExamAttemptStatus(exam.id, userId, "submitted");
     }
 
     // 2. Fetch correct keys

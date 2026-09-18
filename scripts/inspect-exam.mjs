@@ -1,6 +1,7 @@
 import "dotenv/config";
 import fs from "node:fs";
-import admin from "firebase-admin";
+import { initializeApp, cert } from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 if (!serviceAccountPath) {
@@ -10,18 +11,19 @@ if (!serviceAccountPath) {
 const rawServiceAccount = fs.readFileSync(serviceAccountPath, "utf-8");
 const serviceAccount = JSON.parse(rawServiceAccount);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+initializeApp({
+  credential: cert(serviceAccount),
 });
 
-const db = admin.firestore();
+const db = getFirestore();
 
 const inspect = async () => {
+  const targetTitle = process.argv[2] || "[Uji Sistem] E2E Automated Test";
   const examsRef = db.collection("exams");
-  const querySnap = await examsRef.where("title", "==", "ASAT MTL X 2026").get();
+  const querySnap = await examsRef.where("title", "==", targetTitle).get();
   
   if (querySnap.empty) {
-    console.log("Exam 'ASAT MTL X 2026' not found.");
+    console.log(`Exam '${targetTitle}' not found.`);
     return;
   }
   

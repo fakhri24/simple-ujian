@@ -23,6 +23,7 @@ const selectOptionProgrammatically = async (page, selector, val) => {
           option.text.includes(value)
         ) {
           select.selectedIndex = i;
+          select.value = option.value;
           found = true;
           break;
         }
@@ -83,8 +84,8 @@ test.describe('CBT Passage / Wacana Flow', () => {
       return select && select.options.length > 0;
     });
     
-    // Select the "ASAT MTL X 2026" exam programmatically
-    await selectOptionProgrammatically(page, '#editor-load-exam', 'ASAT MTL X 2026');
+    // Select the "[Uji Sistem] E2E Automated Test" exam programmatically
+    await selectOptionProgrammatically(page, '#editor-load-exam', '[Uji Sistem] E2E Automated Test');
     await page.click('#editor-load-exam-btn');
 
     // Verify workspace is visible
@@ -123,7 +124,7 @@ test.describe('CBT Passage / Wacana Flow', () => {
     await page.click('#edit-save-btn');
 
     // Select the exam to save to in the bottom dropdown programmatically
-    await selectOptionProgrammatically(page, '#editor-save-target-exam', 'ASAT MTL X 2026');
+    await selectOptionProgrammatically(page, '#editor-save-target-exam', '[Uji Sistem] E2E Automated Test');
 
     // Save/Apply to Exam (which will trigger window.confirm and then window.alert)
     await page.click('#editor-save-exam-btn');
@@ -145,8 +146,8 @@ test.describe('CBT Passage / Wacana Flow', () => {
     // Wait for student dashboard to load
     await expect(page).toHaveURL(/\/pages\/student\.html/);
 
-    // Find "ASAT MTL X 2026" exam item, paginating if needed
-    let examItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+    // Find "[Uji Sistem] E2E Automated Test" exam item, paginating if needed
+    let examItem = page.locator('li', { hasText: '[Uji Sistem] E2E Automated Test' });
     let pageCount = 0;
     while (pageCount < 10) {
       if (await examItem.isVisible()) {
@@ -156,7 +157,7 @@ test.describe('CBT Passage / Wacana Flow', () => {
       if (await nextBtn.isVisible() && !(await nextBtn.isDisabled())) {
         await nextBtn.click();
         await page.waitForTimeout(300); // short wait for page render
-        examItem = page.locator('li', { hasText: 'ASAT MTL X 2026' });
+        examItem = page.locator('li', { hasText: '[Uji Sistem] E2E Automated Test' });
         pageCount++;
       } else {
         break;
@@ -173,12 +174,19 @@ test.describe('CBT Passage / Wacana Flow', () => {
 
     // Dismiss fullscreen anti-cheat overlay
     const startFsBtn = page.locator('#start-fs-btn');
-    try {
-      await startFsBtn.waitFor({ state: 'visible', timeout: 5000 });
-      await startFsBtn.click();
-    } catch (e) {}
+    await startFsBtn.waitFor({ state: 'visible', timeout: 10000 });
+    await startFsBtn.click();
+
+    // Wait for exam to initialize and start button overlay to be hidden
+    await expect(startFsBtn).toBeHidden({ timeout: 15000 });
 
     // Verify split screen layout is rendered
+    const q1MapBtn = page.locator('#question-map button').first();
+    if (await q1MapBtn.isVisible()) {
+      await q1MapBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     let foundSplit = false;
     for (let i = 0; i < 35; i++) {
       if (await page.locator('.split-question-container').isVisible()) {

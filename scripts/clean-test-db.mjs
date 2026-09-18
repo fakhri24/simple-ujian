@@ -53,12 +53,48 @@ async function clean() {
     });
   });
 
-  // 5. Update target test exam timeframe to ensure it is not expired
-  batch.update(db.collection("exams").doc("FBmjZeEIhJOcXokiNEYS"), {
+  // 5. Setup dedicated private test exam for automated E2E tests (only visible to test student)
+  const origKeysSnap = await db.collection("exam_keys").doc("FBmjZeEIhJOcXokiNEYS").get();
+  if (origKeysSnap.exists) {
+    batch.set(db.collection("exam_keys").doc("test_e2e_exam"), origKeysSnap.data(), { merge: true });
+  }
+
+  const testExamRef = db.collection("exams").doc("test_e2e_exam");
+  batch.set(testExamRef, {
+    title: "[Uji Sistem] E2E Automated Test",
+    description: "Ujian khusus pengujian otomatis Playwright",
+    visibility: "private",
+    assignedTo: [uid],
+    active: true,
     startTime: Timestamp.fromDate(new Date("2020-01-01")),
     latestStartTime: Timestamp.fromDate(new Date("2030-01-01")),
-    active: true
-  });
+    durationMinutes: 120,
+    minSubmitBeforeEndMinutes: 15,
+    allowMultipleAttempts: false,
+    requireSEB: false,
+    randomizeQuestions: false,
+    showResultsImmediately: true,
+    passages: [],
+    questionIds: [
+      "e2mA7TzWSq52Yzlj4gXL",
+      "jQJ9mxHpqtrAWjBbJKzA",
+      "wIxhwXzhQMc34IfRypux",
+      "nGcYaR5SFVB4AcRW5ZF8",
+      "eM2wtSd5oeyn2lcskvO9"
+    ],
+    updatedAt: Timestamp.now()
+  }, { merge: true });
+
+  const testQuestionIds = [
+    "e2mA7TzWSq52Yzlj4gXL",
+    "jQJ9mxHpqtrAWjBbJKzA",
+    "wIxhwXzhQMc34IfRypux",
+    "nGcYaR5SFVB4AcRW5ZF8",
+    "eM2wtSd5oeyn2lcskvO9"
+  ];
+  for (const qid of testQuestionIds) {
+    batch.update(db.collection("questions").doc(qid), { passageId: "" });
+  }
 
   await batch.commit();
   console.log("Pembersihan selesai.");

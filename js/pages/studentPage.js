@@ -3,6 +3,7 @@ import { listActiveExams, findSubmission, getExamAttempt, getSubmissionsForUser,
 import { requireRole } from "../rbac.js";
 import { isLockdown } from "../lockdown.js";
 import { formatDurationDisplay } from "../examEngine.js";
+import { syncServerTime, getServerNow } from "../timeSync.js";
 
 
 const parseDate = (val) => {
@@ -56,15 +57,15 @@ const renderList = async () => {
   // Pre-filter exams based on timeframe and student progress/submission in parallel
   const promises = allExams.map(async (exam) => {
     const sub = await getCachedSubmission(exam.id);
-    const locked = Boolean(sub);
-
     const attempt = await getCachedAttempt(exam.id);
-    const hasOngoingAttempt = attempt && attempt.status === "ongoing" && Date.now() < attempt.endTime;
-    const hasExpiredOngoingAttempt = attempt && attempt.status === "ongoing" && Date.now() >= attempt.endTime;
+    const locked = Boolean(sub) || (attempt && attempt.status === "submitted");
+
+    const now = getServerNow();
+    const hasOngoingAttempt = attempt && attempt.status === "ongoing" && now < attempt.endTime;
+    const hasExpiredOngoingAttempt = attempt && attempt.status === "ongoing" && now >= attempt.endTime;
     const isSubmitPending = localStorage.getItem(`simpleUjian:submitPending:${studentUid}:${exam.id}`) === "true";
     const isBlocked = attempt && attempt.status === "blocked";
 
-    const now = Date.now();
     const latestStartTime = parseDate(exam.latestStartTime);
 
     // Expired if latestStartTime is missing/null, OR if the deadline has passed.
@@ -98,7 +99,7 @@ const renderList = async () => {
 
   // Render items
   const itemPromises = pageExams.map(async ({ exam, sub, locked, hasOngoingAttempt, hasExpiredOngoingAttempt, isSubmitPending, isBlocked }) => {
-    const now = Date.now();
+    const now = getServerNow();
     const startTime = parseDate(exam.startTime);
     const latestStartTime = parseDate(exam.latestStartTime);
 
@@ -243,6 +244,7 @@ const hideGlobalLoading = () => {
 
 const bootstrap = async () => {
   try {
+    await syncServerTime();
     const access = await requireRole("siswa");
     if (!access) {
       return;
