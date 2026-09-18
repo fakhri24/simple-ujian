@@ -1168,7 +1168,15 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
       window.location.replace(`/pages/result.html?submissionId=${submissionId}`);
     } else {
       const congratsModal = document.querySelector("#congrats-modal");
+      const congratsTitle = document.querySelector("#congrats-modal-title");
+      const congratsDesc = document.querySelector("#congrats-modal-desc");
       const congratsOkBtn = document.querySelector("#congrats-ok-btn");
+
+      if (exam?.title) {
+        if (congratsTitle) congratsTitle.textContent = `${exam.title} selesai!`;
+        if (congratsDesc) congratsDesc.textContent = `Selamat! Kamu sudah menyelesaikan ${exam.title} dengan baik. Semoga kamu mendapatkan hasil yang terbaik ya. Aamiin.`;
+      }
+
       if (congratsModal && congratsOkBtn) {
         congratsModal.classList.remove("hidden");
         congratsModal.setAttribute("aria-hidden", "false");
