@@ -2,6 +2,8 @@ import { logout } from "../auth.js";
 import { listActiveExams, findSubmission, getExamAttempt, getSubmissionsForUser, getExamAttemptsForUser, getUserProfile } from "../db.js";
 import { requireRole } from "../rbac.js";
 import { isLockdown } from "../lockdown.js";
+import { formatDurationDisplay } from "../examEngine.js";
+
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -166,7 +168,7 @@ const renderList = async () => {
           ${timeBadge}
         </div>
         <div style="margin-top: 0.5rem;">${exam.description || "-"}</div>
-        <small>Durasi: ${exam.durationMinutes || 0} menit</small>
+        <small>Durasi: ${formatDurationDisplay(exam.durationMinutes)}</small>
         <div class="actions">
           ${actionButton}
           ${

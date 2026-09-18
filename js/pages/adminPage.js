@@ -47,6 +47,36 @@ import { calculateScore } from "../scoring.js";
 import { buildKeyPayload, mergeQuestionsWithKeys, publicAnswerFormat } from "../answerKeys.js";
 import { matchEssayKeyLine, buildEssayKeyFromDocx } from "../essayKeyDocx.js";
 import { matchAnswer, inferMode, describeAnswer } from "../answerMatcher.js";
+import { formatDurationDisplay, isValidDuration } from "../examEngine.js";
+
+const attachDurationCommaHandling = (input) => {
+  if (!input) return;
+
+  // Intercept pengetikan koma (,) agar otomatis menjadi titik (.)
+  input.addEventListener("beforeinput", (e) => {
+    if (e.data === ",") {
+      e.preventDefault();
+      try {
+        if (document.execCommand && document.execCommand("insertText", false, ".")) return;
+      } catch (_) {}
+    }
+  });
+
+  // Intercept paste (misal pengguna menempel "42,5" atau "10,5")
+  input.addEventListener("paste", (e) => {
+    const text = (e.clipboardData || window.clipboardData)?.getData("text") || (e.clipboardData || window.clipboardData)?.getData("text/plain");
+    if (text && text.includes(",")) {
+      e.preventDefault();
+      const normalized = text.replace(",", ".");
+      input.value = normalized;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+};
+
+attachDurationCommaHandling(document.querySelector("#exam-duration"));
+attachDurationCommaHandling(document.querySelector("#edit-exam-duration"));
 
 // Global caching variables
 const userProfileCache = new Map();
@@ -144,7 +174,7 @@ const decorateSelect = (selectEl) => {
           <div class="option-title" dir="auto">${opt.textContent}</div>
           <div class="option-meta">
             ${qCount !== null ? `<span>Soal: ${qCount}</span>` : ""}
-            ${duration !== null ? `<span>Durasi: ${duration} mnt</span>` : ""}
+            ${duration !== null ? `<span>Durasi: ${duration}</span>` : ""}
           </div>
         `;
       } else {
@@ -324,7 +354,7 @@ const filterAndRenderExams = () => {
               </span>
               <span class="meta-badge" title="Durasi Ujian">
                 <span class="meta-icon">⏱️</span>
-                <span class="meta-text">${exam.durationMinutes || 0} Menit</span>
+                <span class="meta-text">${formatDurationDisplay(exam.durationMinutes, "Menit")}</span>
               </span>
             </div>
             
@@ -511,7 +541,7 @@ const renderExams = async () => {
   examsCache = exams;
 
   const optionsHtml = exams
-    .map((exam) => `<option value="${exam.id}" data-questions="${(exam.questionIds || []).length}" data-duration="${exam.durationMinutes || 0}">${exam.title}</option>`)
+    .map((exam) => `<option value="${exam.id}" data-questions="${(exam.questionIds || []).length}" data-duration="${formatDurationDisplay(exam.durationMinutes, "mnt")}">${exam.title}</option>`)
     .join("");
 
   const editorLoadExamSelectEl = document.querySelector("#editor-load-exam");
@@ -560,10 +590,16 @@ document
       const visibility = data.get("visibility") || "public";
       const assignedTo = visibility === "private" ? (createStudentPickerInstance ? createStudentPickerInstance.getSelectedUids() : []) : [];
 
+      const rawDuration = String(data.get("durationMinutes") || "").trim().replace(",", ".");
+      const durationMinutes = Number(rawDuration || 30);
+      if (!isValidDuration(durationMinutes)) {
+        throw new Error("Durasi ujian harus minimal 1 menit dan kelipatan 0,5 menit (misal: 1; 1,5; 42,5).");
+      }
+
       await createExam({
         title: String(data.get("title") || "").trim(),
         description: String(data.get("description") || "").trim(),
-        durationMinutes: Number(data.get("durationMinutes") || 30),
+        durationMinutes,
         minSubmitBeforeEndMinutes: Math.max(0, Number(data.get("minSubmitBeforeEndMinutes") ?? 15)),
         startTime,
         latestStartTime,
@@ -1057,7 +1093,11 @@ editExamForm?.addEventListener("submit", async (e) => {
   const examId = document.querySelector("#edit-exam-id").value;
   const title = document.querySelector("#edit-exam-title").value.trim();
   const description = document.querySelector("#edit-exam-description").value.trim();
-  const durationMinutes = Number(document.querySelector("#edit-exam-duration").value);
+  const rawDuration = String(document.querySelector("#edit-exam-duration")?.value || "").trim().replace(",", ".");
+  const durationMinutes = Number(rawDuration || 30);
+  if (!isValidDuration(durationMinutes)) {
+    throw new Error("Durasi ujian harus minimal 1 menit dan kelipatan 0,5 menit (misal: 1; 1,5; 42,5).");
+  }
   const minSubmitBeforeEndMinutes = Math.max(0, Number(document.querySelector("#edit-exam-min-submit")?.value ?? 15));
   const startTimeVal = document.querySelector("#edit-exam-start-time").value;
   const latestStartTimeVal = document.querySelector("#edit-exam-latest-start-time").value;

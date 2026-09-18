@@ -182,3 +182,18 @@ export const createExamEngine = ({
 
   return api;
 };
+
+export const formatDurationDisplay = (durationMinutes, unit = "menit") => {
+  const num = Number(durationMinutes || 0);
+  if (num <= 0) return `0 ${unit}`;
+  const formatted = num % 1 === 0 ? num.toString() : num.toString().replace(".", ",");
+  return `${formatted} ${unit}`;
+};
+
+export const isValidDuration = (val) => {
+  const num = typeof val === "string" ? Number(val.replace(",", ".")) : Number(val);
+  if (isNaN(num) || num < 1) return false;
+  return Math.abs(num * 2 - Math.round(num * 2)) < 1e-5;
+};
+
+

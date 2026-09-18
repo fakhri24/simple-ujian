@@ -7,22 +7,24 @@ const fallbackFirebaseConfig = {
   appId: "1:133707273043:web:213433c1b1016f721587a6",
 };
 
+const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
+
 export const firebaseConfig = {
   apiKey:
-    import.meta.env.VITE_FIREBASE_API_KEY || fallbackFirebaseConfig.apiKey,
+    env.VITE_FIREBASE_API_KEY || fallbackFirebaseConfig.apiKey,
   authDomain:
-    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ||
+    env.VITE_FIREBASE_AUTH_DOMAIN ||
     fallbackFirebaseConfig.authDomain,
   projectId:
-    import.meta.env.VITE_FIREBASE_PROJECT_ID ||
+    env.VITE_FIREBASE_PROJECT_ID ||
     fallbackFirebaseConfig.projectId,
   storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
+    env.VITE_FIREBASE_STORAGE_BUCKET ||
     fallbackFirebaseConfig.storageBucket,
   messagingSenderId:
-    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ||
+    env.VITE_FIREBASE_MESSAGING_SENDER_ID ||
     fallbackFirebaseConfig.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || fallbackFirebaseConfig.appId,
+  appId: env.VITE_FIREBASE_APP_ID || fallbackFirebaseConfig.appId,
 };
 
 export const roles = {
