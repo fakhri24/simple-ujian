@@ -21,7 +21,7 @@ import { renderQuestion } from "../questionRenderer.js";
 import { calculateScore } from "../scoring.js";
 import { mergeQuestionsWithKeys } from "../answerKeys.js";
 import { ensureSEBClearance } from "../seb-validate.js";
-import { syncServerTime, getServerNow, getServerOffsetMs } from "../timeSync.js";
+import { syncServerTime, getServerNow, getServerOffsetMs, renderClockWarningBanner } from "../timeSync.js";
 
 const shuffleQuestionsWithPassages = (questionsList, randomize) => {
   if (!randomize) {
@@ -340,6 +340,10 @@ const reorderQuestions = (questionsList, questionIdsOrder) => {
 const bootstrap = async () => {
   try {
     await syncServerTime();
+    const examMain = document.querySelector(".exam-main");
+    if (examMain) {
+      renderClockWarningBanner(examMain);
+    }
     const access = await requireRole("siswa");
     if (!access) {
       return;

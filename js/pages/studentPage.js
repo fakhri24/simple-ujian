@@ -3,7 +3,7 @@ import { listActiveExams, findSubmission, getExamAttempt, getSubmissionsForUser,
 import { requireRole } from "../rbac.js";
 import { isLockdown } from "../lockdown.js";
 import { formatDurationDisplay } from "../examEngine.js";
-import { syncServerTime, getServerNow } from "../timeSync.js";
+import { syncServerTime, getServerNow, renderClockWarningBanner } from "../timeSync.js";
 
 
 const parseDate = (val) => {
@@ -245,6 +245,10 @@ const hideGlobalLoading = () => {
 const bootstrap = async () => {
   try {
     await syncServerTime();
+    const mainContainer = document.querySelector("main.container");
+    if (mainContainer) {
+      renderClockWarningBanner(mainContainer);
+    }
     const access = await requireRole("siswa");
     if (!access) {
       return;

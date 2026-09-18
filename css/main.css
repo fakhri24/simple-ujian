@@ -3076,3 +3076,75 @@ input, textarea, select {
   }
 }
 
+/* ==========================================================================
+   Clock Skew Warning Banner
+   ========================================================================== */
+.clock-warning-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 12px;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08);
+  animation: bannerFadeIn 0.3s ease-out;
+}
+
+@keyframes bannerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.clock-warning-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.clock-warning-icon {
+  font-size: 1.3rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.clock-warning-text {
+  flex: 1;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #92400e;
+}
+
+.clock-warning-text strong {
+  color: #78350f;
+}
+
+.clock-warning-text em {
+  font-style: normal;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.clock-warning-dismiss {
+  background: transparent;
+  border: none;
+  color: #b45309;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  line-height: 1;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.clock-warning-dismiss:hover {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #78350f;
+}
+
