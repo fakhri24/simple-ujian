@@ -22,6 +22,7 @@ import { calculateScore } from "../scoring.js";
 import { mergeQuestionsWithKeys } from "../answerKeys.js";
 import { ensureSEBClearance } from "../seb-validate.js";
 import { syncServerTime, getServerNow, getServerOffsetMs, renderClockWarningBanner } from "../timeSync.js";
+import { isTouchDevice, isWritingInputActive, CHEATING_COOLDOWN_MS } from "../antiCheat.js";
 
 const shuffleQuestionsWithPassages = (questionsList, randomize) => {
   if (!randomize) {
@@ -619,7 +620,6 @@ const bootstrap = async () => {
     };
 
     let lastCheatingLogTime = 0;
-    const CHEATING_COOLDOWN_MS = 1500; // Cooldown 1.5 detik agar tindakan keluar tunggal tidak terhitung ganda
 
     const triggerCheatingViolation = async (eventName) => {
       const now = Date.now();
@@ -653,10 +653,30 @@ const bootstrap = async () => {
       if (isMonitoringActive) return;
       isMonitoringActive = true;
 
+      // Pantau rotasi layar tablet/HP agar perubahan orientasi tidak memicu false positive fullscreen
+      let lastOrientationChangeTime = 0;
+      const onOrientationChange = () => {
+        lastOrientationChangeTime = Date.now();
+      };
+      window.addEventListener("orientationchange", onOrientationChange);
+      if (typeof screen !== "undefined" && screen.orientation && screen.orientation.addEventListener) {
+        screen.orientation.addEventListener("change", onOrientationChange);
+      }
+
       // 1. Deteksi Layar Penuh
       const onFullscreenChange = async () => {
         if (!startOverlay.classList.contains("hidden")) return;
         
+        // Toleransi esai/input: abaikan keluar fullscreen jika siswa sedang mengetik (keyboard virtual mobile/tablet mendesak viewport)
+        if (isWritingInputActive()) {
+          return;
+        }
+
+        // Toleransi rotasi layar: abaikan jika baru saja terjadi perubahan orientasi layar
+        if (Date.now() - lastOrientationChangeTime < 2500) {
+          return;
+        }
+
         const isFS = document.fullscreenElement || document.webkitFullscreenElement;
         if (!isFS && !hasSubmitted) {
           lockOverlay.classList.remove("hidden");
@@ -676,7 +696,13 @@ const bootstrap = async () => {
 
       // 3. Deteksi Kehilangan Fokus Window
       const onWindowBlur = async () => {
-        if (!hasSubmitted && !isSystemPopupOpen) {
+        // Layar sentuh (tablet/HP): abaikan window.blur karena keyboard virtual, bar autofill, dock, gestur tepi
+        if (isTouchDevice()) {
+          return;
+        }
+
+        // Pada laptop/PC: periksa apakah modal sistem terbuka atau sedang fokus mengetik
+        if (!hasSubmitted && !isSystemPopupOpen && !isWritingInputActive()) {
           await triggerCheatingViolation("Kehilangan Fokus Browser");
         }
       };
@@ -1043,16 +1069,19 @@ const bootstrap = async () => {
 
       confirmModalEl.classList.remove("hidden");
       confirmModalEl.setAttribute("aria-hidden", "false");
+      isSystemPopupOpen = true;
     });
 
     confirmCancelBtn.addEventListener("click", () => {
       confirmModalEl.classList.add("hidden");
       confirmModalEl.setAttribute("aria-hidden", "true");
+      isSystemPopupOpen = false;
     });
 
     confirmSubmitBtn.addEventListener("click", async () => {
       confirmModalEl.classList.add("hidden");
       confirmModalEl.setAttribute("aria-hidden", "true");
+      isSystemPopupOpen = false;
       
       if (!engine || hasSubmitted) return;
       hasSubmitted = true;
