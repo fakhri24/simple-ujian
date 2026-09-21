@@ -110,10 +110,22 @@
       <div class="modal-content card" style="max-width: 450px; text-align: center; padding: 2.5rem; border-radius: 20px;">
         <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎉</div>
         <h2 id="congrats-modal-title" style="color: var(--success); margin-top: 0; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.6rem;">Ujian selesai!</h2>
-        <p id="congrats-modal-desc" style="color: #64748b; line-height: 1.6; font-size: 0.95rem; margin-bottom: 2rem; font-family: 'Outfit', sans-serif;">
+        <p id="congrats-modal-desc" style="color: #64748b; line-height: 1.6; font-size: 0.95rem; margin-bottom: 1.5rem; font-family: 'Outfit', sans-serif;">
           Selamat! Kamu sudah menyelesaikan ujian dengan baik. Semoga kamu mendapatkan hasil yang terbaik ya. Aamiin.
         </p>
-        <div style="display: flex; gap: 1rem; justify-content: center;">
+
+        <!-- Box Nilai (Hanya muncul jika mode score_only) -->
+        <div id="congrats-score-box" class="hidden" style="background: rgba(79, 70, 229, 0.05); border: 1.5px dashed var(--brand); border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--brand); text-transform: uppercase; letter-spacing: 0.5px;">Nilai Kamu</div>
+          <div id="congrats-score-val" style="font-size: 3rem; font-weight: 800; color: var(--brand); line-height: 1.1; margin: 0.25rem 0;">0</div>
+          <div id="congrats-score-scale" style="font-size: 0.85rem; color: #64748b; font-weight: 500;">Skala 100</div>
+          <p style="font-size: 0.8rem; color: #94a3b8; margin: 0.5rem 0 0 0; line-height: 1.4;">
+            *Pembahasan soal dirahasiakan selama periode ujian berlangsung.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: center; flex-direction: column;">
+          <a id="congrats-view-result-btn" href="#" class="link-btn hidden" style="text-decoration: none; padding: 0.75rem 2rem; font-weight: 700; border-radius: 12px; text-align: center;">Lihat Rincian Nilai</a>
           <button type="button" id="congrats-ok-btn" style="padding: 0.75rem 2rem; font-weight: 700; border-radius: 12px; cursor: pointer; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2); width: 100%;">Kembali ke Dashboard</button>
         </div>
       </div>

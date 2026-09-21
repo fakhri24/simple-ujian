@@ -151,7 +151,8 @@ export const scoreQuestion = (question, answer, weight = 100) => {
   return { score: 0, status: "wrong" };
 };
 
-export const calculateScore = (questions, answersByQuestionId) => {
+export const calculateScore = (questions, answersByQuestionId, scoreScale = 100) => {
+  const scale = Number(scoreScale) === 1000 ? 1000 : 100;
   let totalRawPoints = 0;
   let totalMaxPoints = 0;
 
@@ -182,11 +183,12 @@ export const calculateScore = (questions, answersByQuestionId) => {
     return entry;
   });
 
-  let total = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * 100 : 0;
+  let total = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * scale : 0;
   total = Number(total.toFixed(2));
 
-  // Koreksi pembulatan jika total mendekati 100 (misalnya 100.02 atau 99.98)
-  if (Math.abs(total - 100) < 0.05) {
+  // Koreksi pembulatan jika total mendekati scale (misalnya 100.02 atau 99.98; untuk 1000 misalnya 999.8)
+  const tolerance = scale === 1000 ? 0.5 : 0.05;
+  if (Math.abs(total - scale) < tolerance) {
     const perfectCount = breakdown.filter(
       (b) =>
         b.status === "correct" ||
@@ -194,12 +196,12 @@ export const calculateScore = (questions, answersByQuestionId) => {
         (b.type === "essay" && b.score >= b.scoreWeight)
     ).length;
     if (perfectCount === questions.length) {
-      total = 100;
+      total = scale;
     }
   }
 
-  // Batasi agar tidak pernah melebihi 100
-  total = Math.min(100, total);
+  // Batasi agar tidak pernah melebihi scale
+  total = Math.min(scale, total);
 
-  return { total, breakdown };
+  return { total, breakdown, scoreScale: scale };
 };

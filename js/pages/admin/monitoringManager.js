@@ -78,7 +78,8 @@ const forceSubmitStudentAttempt = async (examId, userId) => {
   const mergedQuestions = mergeQuestionsWithKeys(questions, keysMap);
 
   const answers = attempt.answersByQuestionId || {};
-  const scoreResult = calculateScore(mergedQuestions, answers);
+  const scoreScale = exam.scoreScale === 1000 ? 1000 : 100;
+  const scoreResult = calculateScore(mergedQuestions, answers, scoreScale);
 
   const isAttemptBlocked = attempt.status === "blocked";
 
@@ -91,6 +92,7 @@ const forceSubmitStudentAttempt = async (examId, userId) => {
       answersByQuestionId: answers,
       totalScore: scoreResult.total,
       breakdown: scoreResult.breakdown,
+      scoreScale,
       durationMinutes: Number(exam.durationMinutes || 30),
       isBlocked: isAttemptBlocked,
     }),

@@ -596,6 +596,10 @@ document
         throw new Error("Durasi ujian harus minimal 1 menit dan kelipatan 0,5 menit (misal: 1; 1,5; 42,5).");
       }
 
+      const resultsPolicy = String(data.get("resultsPolicy") || "full");
+      const showResultsImmediately = resultsPolicy !== "none";
+      const scoreScale = Number(data.get("scoreScale")) === 1000 ? 1000 : 100;
+
       await createExam({
         title: String(data.get("title") || "").trim(),
         description: String(data.get("description") || "").trim(),
@@ -604,7 +608,9 @@ document
         startTime,
         latestStartTime,
         allowMultipleAttempts: data.get("allowMultipleAttempts") === "true",
-        showResultsImmediately: data.get("showResultsImmediately") === "true",
+        resultsPolicy,
+        showResultsImmediately,
+        scoreScale,
         randomizeQuestions: data.get("randomizeQuestions") === "true",
         requireSEB: data.get("requireSEB") === "true",
         active: data.get("active") === "true",
@@ -634,6 +640,16 @@ document
       if (examWorkspaceSelect) {
         examWorkspaceSelect.value = "true";
         examWorkspaceSelect.dispatchEvent(new Event("change"));
+      }
+      const examResultsPolicySelect = document.querySelector("#exam-results-policy");
+      if (examResultsPolicySelect) {
+        examResultsPolicySelect.value = "full";
+        examResultsPolicySelect.dispatchEvent(new Event("change"));
+      }
+      const examScoreScaleSelect = document.querySelector("#exam-score-scale");
+      if (examScoreScaleSelect) {
+        examScoreScaleSelect.value = "100";
+        examScoreScaleSelect.dispatchEvent(new Event("change"));
       }
       feedbackEl.textContent = "Ujian berhasil dibuat.";
       await renderExams();
@@ -1020,13 +1036,15 @@ const openEditExamModal = (exam) => {
   document.querySelector("#edit-exam-latest-start-time").value = formatDateTimeLocal(latestStartTime);
   
   const allowMultipleAttempts = exam.allowMultipleAttempts ?? true;
-  const showResultsImmediately = exam.showResultsImmediately ?? true;
+  const resultsPolicy = exam.resultsPolicy || (exam.showResultsImmediately === false ? "none" : "full");
+  const scoreScale = exam.scoreScale === 1000 ? 1000 : 100;
   const randomizeQuestions = exam.randomizeQuestions ?? false;
   const requireSEB = exam.requireSEB ?? false;
   const enableWorkspaceColumn = exam.enableWorkspaceColumn ?? true;
 
   const attemptsEl = document.querySelector("#edit-exam-attempts-policy");
   const resultsEl = document.querySelector("#edit-exam-results-policy");
+  const scoreScaleEl = document.querySelector("#edit-exam-score-scale");
   const randomizeQuestionsEl = document.querySelector("#edit-exam-randomize-questions");
   const requireSEBEl = document.querySelector("#edit-exam-require-seb");
   const enableWorkspaceEl = document.querySelector("#edit-exam-enable-workspace");
@@ -1036,8 +1054,12 @@ const openEditExamModal = (exam) => {
     attemptsEl.dispatchEvent(new Event("change"));
   }
   if (resultsEl) {
-    resultsEl.value = String(showResultsImmediately);
+    resultsEl.value = resultsPolicy;
     resultsEl.dispatchEvent(new Event("change"));
+  }
+  if (scoreScaleEl) {
+    scoreScaleEl.value = String(scoreScale);
+    scoreScaleEl.dispatchEvent(new Event("change"));
   }
   if (randomizeQuestionsEl) {
     randomizeQuestionsEl.value = String(randomizeQuestions);
@@ -1103,7 +1125,9 @@ editExamForm?.addEventListener("submit", async (e) => {
   const latestStartTimeVal = document.querySelector("#edit-exam-latest-start-time").value;
 
   const allowMultipleAttempts = document.querySelector("#edit-exam-attempts-policy")?.value === "true";
-  const showResultsImmediately = document.querySelector("#edit-exam-results-policy")?.value === "true";
+  const resultsPolicy = document.querySelector("#edit-exam-results-policy")?.value || "full";
+  const showResultsImmediately = resultsPolicy !== "none";
+  const scoreScale = Number(document.querySelector("#edit-exam-score-scale")?.value) === 1000 ? 1000 : 100;
   const randomizeQuestions = document.querySelector("#edit-exam-randomize-questions")?.value === "true";
   const requireSEB = document.querySelector("#edit-exam-require-seb")?.value === "true";
   const active = document.querySelector("#edit-exam-active")?.value === "true";
@@ -1133,7 +1157,9 @@ editExamForm?.addEventListener("submit", async (e) => {
       startTime,
       latestStartTime,
       allowMultipleAttempts,
+      resultsPolicy,
       showResultsImmediately,
+      scoreScale,
       randomizeQuestions,
       requireSEB,
       active,

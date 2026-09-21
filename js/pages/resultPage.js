@@ -40,6 +40,38 @@ const hideGlobalLoading = () => {
   }
 };
 
+const renderStats = (breakdown) => {
+  const summaryGrid = document.querySelector("#result-summary-grid");
+  if (!summaryGrid || !breakdown) return;
+
+  const total = breakdown.length;
+  const correct = breakdown.filter((b) => b.status === "correct" || b.status === "graded").length;
+  const partial = breakdown.filter((b) => b.status === "partial").length;
+  const wrong = breakdown.filter((b) => b.status === "wrong").length;
+  const manual = breakdown.filter((b) => b.status === "manual").length;
+
+  const statTotalEl = document.querySelector("#stat-total-questions");
+  const statCorrectEl = document.querySelector("#stat-correct");
+  const statPartialEl = document.querySelector("#stat-partial");
+  const statWrongEl = document.querySelector("#stat-wrong");
+  const statManualEl = document.querySelector("#stat-manual");
+  const statManualCard = document.querySelector("#stat-manual-card");
+
+  if (statTotalEl) statTotalEl.textContent = String(total);
+  if (statCorrectEl) statCorrectEl.textContent = String(correct);
+  if (statPartialEl) statPartialEl.textContent = String(partial);
+  if (statWrongEl) statWrongEl.textContent = String(wrong);
+
+  if (manual > 0) {
+    if (statManualCard) statManualCard.classList.remove("hidden");
+    if (statManualEl) statManualEl.textContent = String(manual);
+  } else if (statManualCard) {
+    statManualCard.classList.add("hidden");
+  }
+
+  summaryGrid.classList.remove("hidden");
+};
+
 const bootstrap = async () => {
   try {
     const access = await requireRole("siswa");
@@ -68,18 +100,29 @@ const bootstrap = async () => {
             return;
           }
 
-          // Periksa kebijakan tampilan hasil ujian
+          // Periksa kebijakan tampilan hasil ujian & skala nilai
           const exam = await getExamById(submission.examId);
-          const showResults = exam ? (exam.showResultsImmediately ?? true) : true;
-          if (!showResults) {
+          const resultsPolicy = exam?.resultsPolicy || (exam?.showResultsImmediately === false ? "none" : "full");
+          const scoreScale = submission.scoreScale || (exam?.scoreScale === 1000 ? 1000 : 100);
+
+          const scoreSubtitleEl = document.querySelector("#result-score-subtitle");
+          if (scoreSubtitleEl) {
+            scoreSubtitleEl.textContent = `Total Skor (Skala ${scoreScale})`;
+          }
+
+          if (resultsPolicy === "none") {
             const scoreCard = scoreEl.closest(".card");
             if (scoreCard) {
               scoreCard.style.display = "none";
             }
             
-            const detailHeader = document.querySelector("h3");
+            const detailHeader = document.querySelector("#result-breakdown-title") || document.querySelector("h3");
             if (detailHeader) {
               detailHeader.style.display = "none";
+            }
+            const summaryGrid = document.querySelector("#result-summary-grid");
+            if (summaryGrid) {
+              summaryGrid.classList.add("hidden");
             }
             
             breakdownEl.innerHTML = `
@@ -103,6 +146,35 @@ const bootstrap = async () => {
           }
 
           scoreEl.textContent = String(submission.totalScore || 0);
+
+          // Tampilkan ringkasan statistik pengerjaan
+          renderStats(submission.breakdown || []);
+
+          // Jika kebijakan "Tampilkan Nilai Saja", kunci pembahasan dan jangan ambil examKeys
+          if (resultsPolicy === "score_only") {
+            const detailHeader = document.querySelector("#result-breakdown-title") || document.querySelector("h3");
+            if (detailHeader) {
+              detailHeader.style.display = "none";
+            }
+
+            breakdownEl.innerHTML = `
+              <div class="card" style="text-align: center; padding: 3.5rem 2rem; color: #64748b; font-family: 'Outfit', sans-serif; border-radius: 16px;">
+                <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔒</div>
+                <div style="font-weight: 800; font-size: 1.5rem; color: var(--brand); margin-bottom: 0.75rem;">Pembahasan Soal Dirahasiakan</div>
+                <p style="font-size: 0.95rem; color: #64748b; max-width: 480px; margin: 0 auto 2rem auto; line-height: 1.6;">
+                  Kunci jawaban dan pembahasan belum dibuka oleh Guru/Pengawas ujian untuk menjaga kerahasiaan soal selama periode Try Out atau ujian berlangsung.
+                </p>
+                <a id="dashboard-back-btn" href="/pages/student.html" class="link-btn" style="text-decoration: none; padding: 0.85rem 2rem; font-size: 1rem; border-radius: 12px;">Kembali ke Dashboard</a>
+              </div>
+            `;
+            return;
+          }
+
+          // Mode "full": Tampilkan seluruh detail soal dan kunci jawaban
+          const detailHeader = document.querySelector("#result-breakdown-title") || document.querySelector("h3");
+          if (detailHeader) {
+            detailHeader.style.display = "block";
+          }
 
           // Get question IDs from breakdown
           const questionIds = (submission.breakdown || []).map((item) => item.questionId);

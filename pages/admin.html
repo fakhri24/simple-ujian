@@ -173,9 +173,10 @@
                     </div>
                     <div class="stack" style="margin: 0;">
                       <label for="exam-results-policy">Kebijakan Hasil</label>
-                      <select id="exam-results-policy" name="showResultsImmediately">
-                        <option value="true" selected>Tampilkan Nilai & Hasil</option>
-                        <option value="false">Hanya Pop-up Selamat</option>
+                      <select id="exam-results-policy" name="resultsPolicy">
+                        <option value="full" selected>Tampilkan Nilai & Hasil</option>
+                        <option value="score_only">Tampilkan Nilai Saja (Aman untuk TO)</option>
+                        <option value="none">Hanya Pop-up Selamat (Sembunyikan Semua)</option>
                       </select>
                     </div>
                   </div>
@@ -220,6 +221,13 @@
                       <select id="exam-enable-workspace" name="enableWorkspaceColumn">
                         <option value="true" selected>Ya (1/2 Soal, 1/2 Lembar Kerja)</option>
                         <option value="false">Tidak (Full Lebar Soal)</option>
+                      </select>
+                    </div>
+                    <div class="stack" style="margin: 0;">
+                      <label for="exam-score-scale">Skala Nilai</label>
+                      <select id="exam-score-scale" name="scoreScale">
+                        <option value="100" selected>Skala 100 (Standar: 0 - 100)</option>
+                        <option value="1000">Skala 1000 (Try Out / UTBK SNBT: 0 - 1000)</option>
                       </select>
                     </div>
                   </div>
@@ -780,8 +788,9 @@
               <div class="stack" style="margin: 0;">
                 <label for="edit-exam-results-policy">Kebijakan Hasil</label>
                 <select id="edit-exam-results-policy" style="background: white;">
-                  <option value="true">Tampilkan Nilai & Hasil</option>
-                  <option value="false">Hanya Pop-up Selamat</option>
+                  <option value="full">Tampilkan Nilai & Hasil</option>
+                  <option value="score_only">Tampilkan Nilai Saja (Aman untuk TO)</option>
+                  <option value="none">Hanya Pop-up Selamat</option>
                 </select>
               </div>
             </div>
@@ -826,6 +835,13 @@
                 <select id="edit-exam-enable-workspace" style="background: white;">
                   <option value="true">Ya (1/2 Soal, 1/2 Lembar Kerja)</option>
                   <option value="false">Tidak (Full Lebar Soal)</option>
+                </select>
+              </div>
+              <div class="stack" style="margin: 0;">
+                <label for="edit-exam-score-scale">Skala Nilai</label>
+                <select id="edit-exam-score-scale" style="background: white;">
+                  <option value="100">Skala 100 (Standar: 0 - 100)</option>
+                  <option value="1000">Skala 1000 (Try Out / UTBK SNBT: 0 - 1000)</option>
                 </select>
               </div>
             </div>

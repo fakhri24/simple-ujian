@@ -413,8 +413,8 @@ const bootstrap = async () => {
     const existingSubmission = await findSubmission(examId, userId);
     const allowMultipleAttempts = exam.allowMultipleAttempts ?? true;
     if (!allowMultipleAttempts && existingSubmission) {
-      const showResults = exam.showResultsImmediately ?? true;
-      if (showResults) {
+      const resultsPolicy = exam.resultsPolicy || (exam.showResultsImmediately === false ? "none" : "full");
+      if (resultsPolicy !== "none") {
         window.location.replace(`/pages/result.html?submissionId=${existingSubmission.id}`);
         return;
       }
@@ -822,7 +822,8 @@ const bootstrap = async () => {
           try {
             const examKeys = await getExamKeys(exam.id);
             const mergedQuestions = mergeQuestionsWithKeys(activeQuestions, examKeys?.keys || {});
-            const scoreResult = calculateScore(mergedQuestions, engine.answers);
+            const scoreScale = exam.scoreScale === 1000 ? 1000 : 100;
+            const scoreResult = calculateScore(mergedQuestions, engine.answers, scoreScale);
             await createSubmission({
               examId: exam.id,
               userId,
@@ -831,6 +832,7 @@ const bootstrap = async () => {
               answersByQuestionId: engine.answers,
               totalScore: scoreResult.total,
               breakdown: scoreResult.breakdown,
+              scoreScale,
               durationMinutes: Number(exam.durationMinutes || 30),
               isBlocked: true,
             });
@@ -1210,8 +1212,9 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
     // 2. Fetch correct keys
     const examKeys = await getExamKeys(exam.id);
     const mergedQuestions = mergeQuestionsWithKeys(questions, examKeys?.keys || {});
+    const scoreScale = exam.scoreScale === 1000 ? 1000 : 100;
 
-    const scoreResult = calculateScore(mergedQuestions, engine.answers);
+    const scoreResult = calculateScore(mergedQuestions, engine.answers, scoreScale);
     
     // Generate deterministic submission ID based on startedAt of latestAttempt
     const startedAt = latestAttempt?.startedAt || new Date().toISOString();
@@ -1226,6 +1229,7 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
       answersByQuestionId: engine.answers,
       totalScore: scoreResult.total,
       breakdown: scoreResult.breakdown,
+      scoreScale,
       durationMinutes: Number(exam.durationMinutes || 30),
     });
 
@@ -1251,18 +1255,35 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
     window.removeEventListener("online", updateSubmitStatus);
     window.removeEventListener("offline", updateSubmitStatus);
 
-    const showResults = exam.showResultsImmediately ?? true;
-    if (showResults) {
+    const resultsPolicy = exam.resultsPolicy || (exam.showResultsImmediately === false ? "none" : "full");
+    if (resultsPolicy === "full") {
       window.location.replace(`/pages/result.html?submissionId=${submissionId}`);
     } else {
       const congratsModal = document.querySelector("#congrats-modal");
       const congratsTitle = document.querySelector("#congrats-modal-title");
       const congratsDesc = document.querySelector("#congrats-modal-desc");
       const congratsOkBtn = document.querySelector("#congrats-ok-btn");
+      const congratsScoreBox = document.querySelector("#congrats-score-box");
+      const congratsScoreVal = document.querySelector("#congrats-score-val");
+      const congratsScoreScale = document.querySelector("#congrats-score-scale");
+      const congratsViewResultBtn = document.querySelector("#congrats-view-result-btn");
 
       if (exam?.title) {
         if (congratsTitle) congratsTitle.textContent = `${exam.title} selesai!`;
         if (congratsDesc) congratsDesc.textContent = `Selamat! Kamu sudah menyelesaikan ${exam.title} dengan baik. Semoga kamu mendapatkan hasil yang terbaik ya. Aamiin.`;
+      }
+
+      if (resultsPolicy === "score_only") {
+        if (congratsScoreBox) congratsScoreBox.classList.remove("hidden");
+        if (congratsScoreVal) congratsScoreVal.textContent = String(scoreResult.total);
+        if (congratsScoreScale) congratsScoreScale.textContent = `Skala ${scoreScale}`;
+        if (congratsViewResultBtn) {
+          congratsViewResultBtn.href = `/pages/result.html?submissionId=${submissionId}`;
+          congratsViewResultBtn.classList.remove("hidden");
+        }
+      } else {
+        if (congratsScoreBox) congratsScoreBox.classList.add("hidden");
+        if (congratsViewResultBtn) congratsViewResultBtn.classList.add("hidden");
       }
 
       if (congratsModal && congratsOkBtn) {

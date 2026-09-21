@@ -172,11 +172,15 @@ const renderList = async () => {
         <small>Durasi: ${formatDurationDisplay(exam.durationMinutes)}</small>
         <div class="actions">
           ${actionButton}
-          ${
-            locked && (exam.showResultsImmediately ?? true)
-              ? `<a class="link-btn secondary" href="/pages/result.html?submissionId=${sub.id}">Lihat Hasil Terakhir</a>`
-              : ""
-          }
+          ${(() => {
+            if (!locked || !sub) return "";
+            const policy = exam.resultsPolicy || (exam.showResultsImmediately === false ? "none" : "full");
+            if (policy === "none") return "";
+            if (policy === "score_only") {
+              return `<a class="link-btn secondary" href="/pages/result.html?submissionId=${sub.id}">Lihat Nilai</a>`;
+            }
+            return `<a class="link-btn secondary" href="/pages/result.html?submissionId=${sub.id}">Lihat Pembahasan</a>`;
+          })()}
         </div>
       </li>
     `;

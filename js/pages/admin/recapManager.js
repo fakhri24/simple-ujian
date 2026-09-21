@@ -398,7 +398,10 @@ const renderSubmissionDetail = async () => {
           })
         : "-";
     }
-    if (detailTotalScoreEl) detailTotalScoreEl.textContent = `${sub.totalScore || 0} / 100`;
+    const examsCache = getExamsCacheFn();
+    const currentExam = examsCache?.find((e) => e.id === sub.examId);
+    const scoreScale = sub.scoreScale || (currentExam?.scoreScale === 1000 ? 1000 : 100);
+    if (detailTotalScoreEl) detailTotalScoreEl.textContent = `${sub.totalScore || 0} / ${scoreScale}`;
 
     if (detailQuestionsContainer) {
       detailQuestionsContainer.innerHTML = "";
@@ -593,8 +596,12 @@ const regradeSubmissionAutomatically = async () => {
       regradeAutoBtn.textContent = "Menghitung ulang...";
     }
 
+    const examsCache = getExamsCacheFn();
+    const currentExam = examsCache?.find((e) => e.id === sub.examId);
+    const scoreScale = sub.scoreScale || (currentExam?.scoreScale === 1000 ? 1000 : 100);
+
     const oldBreakdown = sub.breakdown || [];
-    const fresh = calculateScore(currentDetailQuestions, sub.answersByQuestionId || {});
+    const fresh = calculateScore(currentDetailQuestions, sub.answersByQuestionId || {}, scoreScale);
 
     const newBreakdown = fresh.breakdown.map((item) => {
       const previous = oldBreakdown.find((old) => old.questionId === item.questionId);
@@ -606,12 +613,13 @@ const regradeSubmissionAutomatically = async () => {
 
     const totalRawPoints = newBreakdown.reduce((sum, item) => sum + (item.score || 0), 0);
     const totalMaxPoints = newBreakdown.reduce((sum, item) => sum + (item.scoreWeight || 10), 0);
-    let newTotal = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * 100 : 0;
-    newTotal = Math.min(100, Number(newTotal.toFixed(2)));
+    let newTotal = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * scoreScale : 0;
+    newTotal = Math.min(scoreScale, Number(newTotal.toFixed(2)));
 
     await updateSubmission(currentDetailSubmissionId, {
       breakdown: newBreakdown,
-      totalScore: newTotal
+      totalScore: newTotal,
+      scoreScale
     });
 
     const stillManual = newBreakdown.filter((item) => item.status === "manual").length;
@@ -664,29 +672,35 @@ const saveManualGrading = async () => {
       return { ...item };
     });
 
+    const examsCache = getExamsCacheFn();
+    const currentExam = examsCache?.find((e) => e.id === sub.examId);
+    const scoreScale = sub.scoreScale || (currentExam?.scoreScale === 1000 ? 1000 : 100);
+
     // Recalculate total score
     const totalRawPoints = newBreakdown.reduce((sum, item) => sum + (item.score || 0), 0);
     const totalMaxPoints = newBreakdown.reduce((sum, item) => sum + (item.scoreWeight || 10), 0);
 
-    let newTotal = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * 100 : 0;
+    let newTotal = totalMaxPoints > 0 ? (totalRawPoints / totalMaxPoints) * scoreScale : 0;
     newTotal = Number(newTotal.toFixed(2));
 
-    // Correction for rounding if close to 100
-    if (Math.abs(newTotal - 100) < 0.05) {
+    // Correction for rounding if close to scoreScale
+    const tolerance = scoreScale === 1000 ? 0.5 : 0.05;
+    if (Math.abs(newTotal - scoreScale) < tolerance) {
       const isAllPerfect = newBreakdown.every(item => {
         return item.status === "correct" || item.status === "graded" || item.score >= item.scoreWeight;
       });
       if (isAllPerfect) {
-        newTotal = 100;
+        newTotal = scoreScale;
       }
     }
 
-    // Cap total score to 100
-    newTotal = Math.min(100, newTotal);
+    // Cap total score to scoreScale
+    newTotal = Math.min(scoreScale, newTotal);
 
     await updateSubmission(currentDetailSubmissionId, {
       breakdown: newBreakdown,
-      totalScore: newTotal
+      totalScore: newTotal,
+      scoreScale
     });
 
     if (feedbackEl) {
