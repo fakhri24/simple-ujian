@@ -1268,9 +1268,14 @@ const submitExam = async ({ engine, questions, exam, userId, email, force }) => 
       const congratsScoreScale = document.querySelector("#congrats-score-scale");
       const congratsViewResultBtn = document.querySelector("#congrats-view-result-btn");
 
-      if (exam?.title) {
-        if (congratsTitle) congratsTitle.textContent = `${exam.title} selesai!`;
-        if (congratsDesc) congratsDesc.textContent = `Selamat! Kamu sudah menyelesaikan ${exam.title} dengan baik. Semoga kamu mendapatkan hasil yang terbaik ya. Aamiin.`;
+      const examTitle = exam?.title || "Ujian";
+      if (congratsTitle) congratsTitle.textContent = `${examTitle} selesai!`;
+      if (congratsDesc) {
+        if (resultsPolicy === "score_only") {
+          congratsDesc.textContent = `Selamat! Kamu sudah menyelesaikan ${examTitle} dengan baik.`;
+        } else {
+          congratsDesc.textContent = `Selamat! Kamu sudah menyelesaikan ${examTitle} dengan baik. Semoga kamu mendapatkan hasil yang terbaik ya. Aamiin.`;
+        }
       }
 
       if (resultsPolicy === "score_only") {
